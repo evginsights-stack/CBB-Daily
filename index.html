@@ -1,0 +1,1732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CBB Daily Board</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800;900&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #080c10; --surface: #131920; --surface2: #1c242e;
+      --border: #2d3748; --text: #e6edf3; --muted: #8b949e;
+      --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+      --yellow: #e3b341; --orange: #f0883e; --purple: #bc8cff;
+    }
+    body { font-family: 'Barlow', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 12px 20px; display: flex; align-items: center;
+      justify-content: space-between; flex-wrap: wrap; gap: 8px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-left h1 { font-size: 18px; font-weight: 700; font-family: 'Barlow Condensed', sans-serif; letter-spacing: .5px; }
+    .header-left h1 span { color: var(--accent); }
+    #headerSub { font-size: 11px; color: var(--muted); }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    #espnStatus { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--border); }
+    .refresh-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--accent); padding: 5px 11px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .refresh-btn:hover { border-color: var(--accent); }
+
+    /* ── UPLOAD ZONE ── */
+    .upload-zone {
+      border: 2px dashed var(--border); border-radius: 12px;
+      padding: 48px 20px; text-align: center; cursor: pointer;
+      transition: all .2s; margin: 24px;
+    }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: #58a6ff0d; }
+    .upload-zone h3 { font-size: 16px; margin-bottom: 8px; }
+    .upload-zone p { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .upload-zone label { display: inline-block; background: var(--accent); color: #fff; padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    #fileInput { display: none; }
+
+    /* ── MAIN ── */
+    main { padding: 0 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── KPI ROW ── */
+    .kpi-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: stretch; }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 11px 16px; min-width: 100px; }
+    .kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 3px; }
+    .kpi-value { font-size: 22px; font-weight: 800; line-height: 1; font-family: 'Barlow Condensed', sans-serif; }
+    .kpi-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+    .kpi-best .kpi-value { font-size: 13px; line-height: 1.3; }
+
+    /* ── DAY TRACKER HOURLY TIMELINE ── */
+    .day-tracker { flex: 1; min-width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 11px 16px; display: flex; flex-direction: column; gap: 7px; }
+    .dt-hours { display: flex; gap: 0; align-items: stretch; height: 40px; border-radius: 6px; overflow: hidden; }
+    .dt-hour {
+      /* flex set inline proportional to game count */
+      min-width: 28px; border-radius: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; cursor: default;
+      transition: opacity .15s; padding: 2px 4px; overflow: hidden;
+    }
+    .dt-hour:first-child { border-radius: 6px 0 0 6px; }
+    .dt-hour:last-child  { border-radius: 0 6px 6px 0; }
+    .dt-hour.dt-gap { flex: 0 0 3px !important; min-width: 0; background: var(--bg); opacity: 1; }
+    .dt-hour.state-blue   { background: #1c2d4a; color: var(--accent); }
+    .dt-hour.state-green  { background: #1a3a24; color: var(--green); }
+    .dt-hour.state-yellow { background: #3a2d0f; color: var(--yellow); }
+    .dt-hour.state-red    { background: #3a1510; color: var(--red); }
+    .dt-hour.state-grey   { background: var(--surface2); color: var(--muted); }
+    .dt-hour-label { font-size: 9px; font-weight: 600; opacity: .75; white-space: nowrap; line-height: 1; }
+    .dt-hour-count { font-size: 15px; font-weight: 900; line-height: 1.1; }
+    .dt-summary { font-size: 11px; color: var(--muted); }
+
+    /* ── FILTER BAR ── */
+    .filter-bar {
+      display: flex; align-items: center; gap: 6px;
+      flex-wrap: wrap; margin-bottom: 10px;
+    }
+    .chip {
+      font-size: 12px; font-weight: 600; padding: 5px 12px;
+      border-radius: 20px; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--muted);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--text); }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .chip.edge-chip.active  { background: var(--yellow); border-color: var(--yellow); color: #000; }
+    .chip.top25-chip.active { background: var(--purple); border-color: var(--purple); color: #000; }
+    .chip.bets-chip.active  { background: var(--orange); border-color: var(--orange); color: #000; }
+    .filter-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+    .edge-select {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    }
+    .edge-select:focus { outline: none; border-color: var(--accent); }
+
+    /* ── PAGE TABS ── */
+    .page-tabs { display: flex; gap: 0; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .page-tab {
+      padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+      color: var(--muted); border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: all .15s;
+    }
+    .page-tab:hover { color: var(--text); }
+    .page-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .tab-count { font-size: 11px; margin-left: 5px; background: var(--surface2); padding: 1px 6px; border-radius: 10px; }
+    .page-tab.info-tab { margin-left: auto; font-size: 12px; color: var(--muted); opacity: .5; }
+    .page-tab.info-tab:hover { opacity: .85; }
+    .page-tab.info-tab.active { opacity: 1; color: var(--text); border-bottom-color: var(--accent); }
+    .info-panel { max-width: 560px; margin: 0 auto; padding: 24px 0; }
+    .info-panel h3 { font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 14px; letter-spacing: .3px; }
+    .info-timestamp { font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 18px; }
+    .info-section { margin-bottom: 20px; }
+    .info-section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+    .info-item { font-size: 12.5px; color: var(--text); padding: 5px 0; line-height: 1.5; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .info-item:last-child { border-bottom: none; }
+    .info-item span.dim { color: var(--muted); }
+    .info-item span.accent { color: var(--accent); font-weight: 600; }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .8px;
+      margin: 14px 0 8px; display: flex; align-items: center; gap: 8px;
+    }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── GRID ── */
+    .scores-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 8px; }
+
+    /* ── SCORE CARD — broadcast style ── */
+    .score-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 9px; overflow: hidden;
+      transition: border-color .15s, box-shadow .15s;
+      box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    }
+    .score-card:hover { border-color: #3d6b9e; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+    .score-card.has-edge { border-left: 3px solid var(--border); }
+    .score-card.big-edge { border-left: 6px solid var(--green); }
+    .score-card.live-1h       { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+    .score-card.live-halftime { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow); }
+    .score-card.live-2h-early { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow); }
+    .score-card.live-2h-late  { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+    .score-card.live-ot       { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+    .score-card.has-bet       { background: rgba(227, 179, 65, 0.20); border-color: rgba(227, 179, 65, 0.35); }
+
+    /* card header bar */
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 5px 10px; background: rgba(0,0,0,.5);
+      border-bottom: 1px solid var(--border);
+    }
+    .card-badges { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+    .badge {
+      font-size: 9px; font-weight: 700; padding: 2px 6px;
+      border-radius: 3px; text-transform: uppercase; letter-spacing: .4px;
+    }
+    .badge-conf { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+    .badge-edge { background: var(--yellow); color: #000; }
+    .badge-big-edge { background: var(--green); color: #000; }
+    .badge-t25 { background: var(--purple); color: #000; }
+
+    .game-status { font-size: 11px; font-weight: 700; white-space: nowrap; letter-spacing: .3px; }
+    .status-live { color: var(--red); }
+    .status-live::before { content: '● '; }
+    .status-sched { color: var(--yellow); }
+    .status-final { color: var(--muted); }
+
+    /* team rows — broadcast scoreboard */
+    .team-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 10px 9px 0; border-left: 4px solid transparent; gap: 6px;
+    }
+    .team-left { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; padding-left: 10px; }
+    .team-logo { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }
+    .rank-tag { font-size: 10px; color: var(--accent); font-weight: 800; min-width: 22px; text-align: center; flex-shrink: 0; letter-spacing: -.3px; }
+    .team-name { font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Barlow Condensed', sans-serif; }
+    .team-score { font-size: 24px; font-weight: 900; min-width: 42px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; line-height: 1; padding-right: 10px; font-family: 'Barlow Condensed', sans-serif; }
+    .score-winner { color: var(--green); }
+    .score-loser  { color: var(--muted); }
+    .score-live   { color: var(--text); }
+    .score-tbd    { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+    /* @ separator */
+    .team-sep { display: flex; align-items: center; gap: 6px; padding: 0 10px 0 14px; }
+    .at-sym { font-size: 9px; font-weight: 700; color: var(--muted); flex-shrink: 0; }
+    .team-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* team bet history badge */
+    .team-hist { font-size: 11px; font-weight: 600; color: var(--muted); margin-left: auto; padding-left: 6px; white-space: nowrap; flex-shrink: 0; }
+    .team-hist.hist-pos { color: var(--green); }
+    .team-hist.hist-neg { color: var(--red); }
+    .team-hist-fn { font-size: 9px; color: var(--muted); margin-left: 4px; white-space: nowrap; flex-shrink: 0; opacity: .8; }
+    .team-hist-fn.hist-pos { color: var(--green); }
+    .team-hist-fn.hist-neg { color: var(--red); }
+
+    /* card footer — lines + bets */
+    .card-footer { padding: 8px 10px; border-top: 1px solid var(--border); background: rgba(0,0,0,.2); }
+
+    /* lines row */
+    .lines-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--surface2); border-radius: 6px;
+      padding: 7px 10px; gap: 6px; flex-wrap: wrap;
+    }
+    .line-item { display: flex; flex-direction: column; gap: 1px; }
+    .line-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .line-val { font-size: 13px; font-weight: 700; }
+    .lv-em { color: var(--accent); }
+    .lv-vegas { color: var(--text); }
+    .lv-edge-med { color: var(--yellow); }
+    .lv-edge-high { color: var(--green); }
+    .lv-edge-low { color: var(--muted); }
+    .line-vsep { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
+    .line-network { text-align: right; align-self: center; }
+    .net-badge {
+      display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .3px;
+      padding: 2px 7px; border-radius: 4px; white-space: nowrap; line-height: 1.3;
+    }
+
+    /* pick row */
+    .pick-row { margin-top: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .pick-label { font-size: 10px; color: var(--muted); }
+    .pick-val { font-size: 12px; font-weight: 700; color: var(--orange); }
+
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 14px; }
+
+    /* ── EM PLAYS TABLE ── */
+    .plays-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .plays-table th {
+      text-align: left; font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .7px; padding: 8px 12px;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .plays-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .plays-table tr:last-child td { border-bottom: none; }
+    .plays-table tr:hover td { background: rgba(255,255,255,.03); }
+    .play-active td { background: rgba(63,185,80,.05); }
+    .play-active:hover td { background: rgba(63,185,80,.09) !important; }
+    .play-status-active { color: var(--green); font-weight: 700; font-size: 11px; white-space: nowrap; }
+    .play-status-pending { color: var(--muted); font-weight: 600; font-size: 11px; white-space: nowrap; }
+    .play-matchup { font-weight: 700; font-size: 13px; }
+    .play-matchup-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .play-bet { font-weight: 700; color: var(--orange); font-size: 13px; }
+    .play-thresh { font-size: 11px; color: var(--muted); font-style: italic; margin-top: 2px; }
+    .play-line-val { font-weight: 700; font-size: 13px; }
+    .play-rank { font-size: 10px; color: var(--accent); font-weight: 800; margin-right: 3px; }
+
+    /* ── BET MODAL ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.75); z-index: 500;
+      align-items: center; justify-content: center;
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; width: 360px;
+      max-width: calc(100vw - 24px); max-height: 90vh; overflow-y: auto;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .modal-title { font-size: 15px; font-weight: 700; }
+    .modal-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 0 4px; }
+    .modal-close:hover { color: var(--text); }
+
+    /* game search */
+    .modal-search-wrap { position: relative; margin-bottom: 12px; }
+    .modal-search {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 10px; border-radius: 7px; font-size: 13px;
+    }
+    .modal-search:focus { outline: none; border-color: var(--accent); }
+    .modal-search-results {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+      background: var(--surface); border: 1px solid var(--border); border-top: none;
+      border-radius: 0 0 7px 7px; max-height: 200px; overflow-y: auto;
+    }
+    .search-result {
+      padding: 8px 12px; font-size: 12px; cursor: pointer;
+      border-bottom: 1px solid var(--border);
+    }
+    .search-result:hover { background: var(--surface2); }
+    .search-result .sr-teams { font-weight: 600; }
+    .search-result .sr-meta { color: var(--muted); font-size: 11px; }
+    .modal-selected-game {
+      background: var(--surface2); border-radius: 7px; padding: 8px 11px;
+      font-size: 12px; margin-bottom: 12px; display: none;
+    }
+    .modal-selected-game .sg-teams { font-weight: 700; }
+    .modal-selected-game .sg-meta { color: var(--muted); font-size: 11px; }
+
+    /* bet type tabs */
+    .modal-tabs { display: flex; gap: 3px; margin-bottom: 12px; background: var(--surface2); border-radius: 7px; padding: 3px; }
+    .modal-tab { flex: 1; padding: 6px; font-size: 12px; font-weight: 600; border: none; background: none; color: var(--muted); border-radius: 5px; cursor: pointer; }
+    .modal-tab.active { background: var(--accent); color: #fff; }
+
+    /* side buttons */
+    .side-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+    .side-btn {
+      flex: 1; padding: 10px 6px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+      border-radius: 8px; cursor: pointer; transition: all .15s; text-align: center;
+    }
+    .side-btn:hover { border-color: var(--accent); }
+    .side-btn.active { border-color: var(--accent); background: #58a6ff22; color: var(--accent); }
+
+    /* inputs */
+    .modal-inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .modal-field input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 7px 8px; border-radius: 6px; font-size: 13px;
+    }
+    .modal-field input:focus { outline: none; border-color: var(--accent); }
+    .modal-submit {
+      width: 100%; padding: 10px; background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .modal-submit:hover { opacity: .9; }
+    .modal-submit:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* bet rows on card */
+    .bet-row {
+      margin-top: 5px; padding: 5px 8px;
+      background: var(--surface2); border-radius: 6px;
+      display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    }
+    .bet-desc { font-size: 11px; font-weight: 600; color: var(--text); flex: 1; }
+    .bet-status { font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .bet-win    { color: var(--green); }
+    .bet-loss   { color: var(--red); }
+    .bet-pending { color: var(--muted); }
+    .bet-remove { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+    .bet-remove:hover { color: var(--red); }
+    .add-bet-btn {
+      margin-top: 6px; width: 100%; padding: 5px;
+      background: none; border: 1px dashed var(--border);
+      border-radius: 6px; color: var(--muted); font-size: 11px; cursor: pointer; transition: all .15s;
+    }
+    .add-bet-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* quick bet in header */
+    .quick-bet-btn {
+      background: var(--yellow); border: none; color: #000;
+      padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .quick-bet-btn:hover { opacity: .85; }
+    .date-picker-sel {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+      min-width: 100px;
+    }
+    .date-picker-sel:focus { outline: none; border-color: var(--accent); }
+
+    /* ── MOBILE ── */
+    @media (max-width: 600px) {
+      header { padding: 10px 12px; gap: 6px; }
+      .header-left h1 { font-size: 16px; }
+      #headerSub { display: none; }
+      .header-right { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+      .quick-bet-btn, .refresh-btn { padding: 5px 8px; font-size: 11px; }
+      main { padding: 0 10px 20px; }
+      .kpi-row { gap: 8px; }
+      .day-tracker { min-width: 100%; }
+      .kpi { min-width: 80px; padding: 9px 12px; }
+      .kpi-value { font-size: 18px; }
+      .scores-grid { grid-template-columns: 1fr !important; gap: 4px; }
+      .score-card { border-radius: 6px; }
+      .card-header { padding: 3px 8px; }
+      .badge { font-size: 8px; padding: 1px 4px; }
+      .game-status { font-size: 10px; }
+      .filter-bar { gap: 5px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .chip { font-size: 11px; padding: 4px 10px; white-space: nowrap; }
+      .edge-select { font-size: 11px; padding: 4px 7px; }
+      #searchInput { width: 120px !important; font-size: 11px; }
+      .page-tab { padding: 8px 12px; font-size: 12px; }
+      .team-row { padding: 5px 6px 5px 0; }
+      .team-logo { width: 18px; height: 18px; }
+      .rank-tag { font-size: 9px; min-width: 14px; }
+      .team-name { font-size: 11px; letter-spacing: 0; }
+      .team-score { font-size: 18px; min-width: 30px; padding-right: 6px; }
+      .team-sep { padding: 0 6px 0 10px; }
+      .card-footer { padding: 4px 8px; }
+      .lines-row { padding: 4px 8px; gap: 4px; }
+      .line-lbl { font-size: 7px; }
+      .line-val { font-size: 11px; }
+      .line-vsep { height: 20px; }
+      .pick-row { margin-top: 3px; }
+      .pick-val { font-size: 11px; }
+      .add-bet-btn { padding: 3px; font-size: 10px; margin-top: 3px; }
+      .modal { padding: 16px; }
+      .modal-inputs { grid-template-columns: 1fr 1fr; }
+      .modal-inputs .modal-field:last-child { grid-column: 1 / -1; }
+      .dt-hour-label { display: none; }
+      .dt-hour-count { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>🏀 CBB <span>Daily Board</span></h1>
+    <span id="headerSub">Drop your EvanMiya xlsx to get started</span>
+  </div>
+  <div class="header-right">
+    <span id="espnStatus">ESPN</span>
+    <select id="datePicker" class="date-picker-sel" style="display:none;" onchange="onDateChange(this.value)"></select>
+    <button class="quick-bet-btn" onclick="openBetModal(null,null)">⚡ Quick Bet</button>
+    <button class="refresh-btn" onclick="fetchESPN()">↻ Refresh</button>
+  </div>
+</header>
+
+<!-- BET MODAL -->
+<div id="modalOverlay" class="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal" id="betModal">
+    <div class="modal-header">
+      <span class="modal-title">💰 Add Bet</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <!-- Game search (shown when opened via Quick Bet) -->
+    <div id="gameSearchWrap" style="display:none;">
+      <div class="modal-search-wrap">
+        <input class="modal-search" id="gameSearchInput" placeholder="Search team name…" oninput="filterGameSearch()" autocomplete="off">
+        <div class="modal-search-results" id="gameSearchResults" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="modal-selected-game" id="selectedGameBox">
+      <div class="sg-teams" id="selectedGameTeams"></div>
+      <div class="sg-meta" id="selectedGameMeta"></div>
+    </div>
+
+    <!-- Bet type -->
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-type="spread" onclick="setBetType('spread')">Spread</button>
+      <button class="modal-tab" data-type="ml" onclick="setBetType('ml')">ML</button>
+      <button class="modal-tab" data-type="total" onclick="setBetType('total')">Total</button>
+      <button class="modal-tab" data-type="1h" onclick="setBetType('1h')">1H</button>
+      <button class="modal-tab" data-type="1to10" onclick="setBetType('1to10')">1st-10</button>
+    </div>
+
+    <!-- Side -->
+    <div class="side-btns">
+      <button class="side-btn active" id="sideBtn0" onclick="setModalSide(0)">Home</button>
+      <button class="side-btn" id="sideBtn1" onclick="setModalSide(1)">Away</button>
+    </div>
+
+    <!-- Inputs -->
+    <div class="modal-inputs">
+      <div class="modal-field" id="lineFieldWrap">
+        <label>Line</label>
+        <input type="number" id="betLine" step="0.5" placeholder="—">
+      </div>
+      <div class="modal-field">
+        <label>Odds</label>
+        <input type="number" id="betOdds" value="-110">
+      </div>
+      <div class="modal-field">
+        <label>Units</label>
+        <input type="number" id="betStake" value="1" step="0.5" min="0.5">
+      </div>
+    </div>
+
+    <button class="modal-submit" id="modalSubmitBtn" onclick="submitBet()">Add Bet</button>
+  </div>
+</div>
+
+<div id="uploadZone" class="upload-zone">
+  <h3>📊 Load EvanMiya Daily Board</h3>
+  <p>Drop your EM Daily Board .xlsx here — scores & lines will merge automatically</p>
+  <label for="fileInput">Choose File</label>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(event)">
+</div>
+
+<main id="mainContent" style="display:none;">
+
+  <!-- KPIs -->
+  <div class="kpi-row" id="kpiRow" style="margin-top:16px;"></div>
+
+  <!-- Page tabs -->
+  <div class="page-tabs">
+    <div class="page-tab active" id="tabLive" onclick="setTab('live')">
+      Live &amp; Upcoming <span class="tab-count" id="countLive">0</span>
+    </div>
+    <div class="page-tab" id="tabFinal" onclick="setTab('final')">
+      Final <span class="tab-count" id="countFinal">0</span>
+    </div>
+    <div class="page-tab" id="tabPlays" onclick="setTab('plays')">
+      Bet Recs <span class="tab-count" id="countPlays">0</span>
+    </div>
+    <div class="page-tab info-tab" id="tabInfo" onclick="setTab('info')">ℹ</div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar" id="filterBar">
+    <div class="chip top25-chip" data-filter="top25" onclick="setChip(this)">Top 25</div>
+    <div class="chip edge-chip" data-filter="edge" onclick="setChip(this)">⭐ Best Bets</div>
+    <div class="chip bets-chip" data-filter="bets" onclick="setChip(this)">💰 My Bets</div>
+    <div class="filter-sep"></div>
+    <select class="edge-select" id="confSelect" onchange="setConf(this.value)">
+      <option value="all">All Conferences</option>
+    </select>
+    <div class="filter-sep"></div>
+    <input type="text" id="searchInput" class="edge-select" placeholder="🔍 Search team…" style="width:140px;" oninput="setSearch(this.value)">
+  </div>
+
+  <!-- Game grids -->
+  <div id="liveSection">
+    <div class="section-label" id="liveSectionLabel" style="display:none;">🔴 Live</div>
+    <div class="scores-grid" id="liveGrid"></div>
+    <div class="section-label" id="schedSectionLabel" style="display:none;">🕐 Upcoming</div>
+    <div class="scores-grid" id="schedGrid"></div>
+  </div>
+  <div id="finalSection" style="display:none;">
+    <div class="scores-grid" id="finalGrid"></div>
+  </div>
+  <div id="playsSection" style="display:none;">
+    <div id="playsGrid"></div>
+  </div>
+  <div id="infoSection" style="display:none;">
+    <div class="info-panel">
+      <h3>Data Refresh Log</h3>
+      <div class="info-timestamp">Odds last updated at 10:56 PM EST — March 13, 2026</div>
+      <div class="info-section">
+        <div class="info-section-title">Board Changes</div>
+        <div class="info-item"><span class="accent">43 games</span> <span class="dim">(was 37) — added 6 March 14 lookahead games</span></div>
+        <div class="info-item">New 3/14 games: <span class="dim">Vanderbilt/Florida, Michigan/Wisconsin, Saint Louis/Dayton, South Florida/Charlotte, Wichita State/Tulsa, Louisiana Tech/Kennesaw State</span></div>
+        <div class="info-item">Vegas lines now live for 3/14: <span class="dim">Harvard/Penn, Cornell/Yale, UMBC/Vermont</span></div>
+      </div>
+      <div class="info-section">
+        <div class="info-section-title">Line Movements (15 games)</div>
+        <div class="info-item">Arizona/Iowa State — Vegas line <span class="dim">-3.5 →</span> <span class="accent">-3.0</span></div>
+        <div class="info-item">Akron/Kent State — Vegas line <span class="dim">-7.0 →</span> <span class="accent">-6.5</span></div>
+        <div class="info-item">Alabama/Ole Miss — Vegas line <span class="dim">-11.5 →</span> <span class="accent">-12.0</span></div>
+        <div class="info-item">Houston/Kansas — Vegas line <span class="dim">-5.5 →</span> <span class="accent">-5.0</span></div>
+        <div class="info-item">Arkansas/Oklahoma — Vegas line <span class="dim">-7.5 →</span> <span class="accent">-6.5</span></div>
+        <div class="info-item"><span class="dim">+ 10 more totals/line shifts across the board</span></div>
+      </div>
+      <div class="info-section">
+        <div class="info-section-title">Best Bet Changes</div>
+        <div class="info-item">Arizona/Iowa State — <span class="dim">-3.5 →</span> <span class="accent">-3.0</span></div>
+        <div class="info-item">Akron/Kent State — <span class="dim">-7.0 →</span> <span class="accent">-6.5</span></div>
+        <div class="info-item">Saint Louis +6, Duke -10.5 <span class="dim">— unchanged</span></div>
+      </div>
+      <div class="info-section">
+        <div class="info-section-title">EM Plays</div>
+        <div class="info-item"><span class="accent">7 total EM plays</span> <span class="dim">(was 5)</span></div>
+      </div>
+      <div class="info-section">
+        <div class="info-section-title">Bug Fixes (3/13)</div>
+        <div class="info-item">12:00 AM games no longer sort before 11 AM — <span class="dim">treated as TBD</span></div>
+        <div class="info-item">Team logos, colors &amp; score highlights now align to correct team <span class="dim">when ESPN/EM disagree on home/away</span></div>
+        <div class="info-item">Games at same hour now sort by exact time <span class="dim">(7:00 PM before 7:30 PM)</span></div>
+        <div class="info-item">ESPN scores auto-refresh every 45s <span class="dim">when games are live or upcoming</span></div>
+      </div>
+      <div class="info-section" style="margin-top: 28px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.06);">
+        <div class="info-item" style="color: var(--muted); font-style: italic; font-size: 12px; line-height: 1.6;">We are working on having the vegas pre-game odds &amp; EM best bets update automatically. As of right now they are updated multiple times a day.</div>
+        <div class="info-item" style="color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 10px;">All projected spreads, totals and best bets are courtesy of Evan Miya's CBB Analytics platform. The projections are derived from his Bayesian Performance Rating (BPR) model. For details/historical performance, visit <a href="https://evanmiya.com/?how_it_works" target="_blank" rel="noopener" style="color: var(--accent); text-decoration: none;">evanmiya.com</a>.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────
+let emGames  = [];
+let espnGames = {};
+let merged   = [];
+let allEMPlays = []; // all rows from Best Bet Data sheet (active + pending)
+let bestBetsMap = {}; // key: "home|||away" (lowercased, trimmed) → play string (top-level for baked + upload flows)
+let activeTab     = 'live';
+let activeConf    = 'all';
+let activeSpecial = null; // 'top25' | 'edge' | 'bets' | null
+let selectedDate  = null; // 'YYYYMMDD' string
+let searchQuery   = '';   // team name search
+
+function setSearch(val) {
+  searchQuery = (val||'').toLowerCase().trim();
+  renderAll();
+}
+
+// ESPN conference ID → short name
+const CONF_NAMES = {
+  '2':'ACC','8':'Big 12','7':'Big Ten','23':'SEC',
+  '1':'American','12':'Big East','25':'WCC','29':'MWC',
+  '15':'A-10','4':'Big South','18':'Ivy','33':'CAA',
+  '46':'Sun Belt','37':'CUSA','6':'MAC','19':'MVC',
+  '34':'ASUN','44':'MEAC','28':'SWAC','5':'Big Sky',
+  '9':'Big West','16':'Horizon','17':'MAAC','22':'NEC',
+  '24':'Patriot','26':'Southern','27':'Summit','31':'WAC',
+  '21':'OVC','3':'America East','32':'WCC',
+};
+
+
+// ─────────────────────────────────────────────────────────────
+// BET HISTORY — team stats & ESPN name → abbreviation map
+// ─────────────────────────────────────────────────────────────
+const BET_TEAM_STATS = {"MSU": {"gw": 12, "gl": 17, "gmn": -87.77, "ow": 7, "ol": 6, "omn": -11.14, "aw": 4, "al": 9, "amn": -114.79}, "WIS": {"gw": 12, "gl": 17, "gmn": -246.77, "ow": 2, "ol": 7, "omn": -111.64, "aw": 9, "al": 9, "amn": -138.77}, "MINN": {"gw": 4, "gl": 1, "gmn": 58.62, "ow": 2, "ol": 1, "omn": 22.96, "aw": 2, "al": 0, "amn": 35.66}, "NEB": {"gw": 6, "gl": 6, "gmn": 34.15, "ow": 4, "ol": 2, "omn": 44.23, "aw": 2, "al": 3, "amn": -0.08}, "BYU": {"gw": 6, "gl": 8, "gmn": -53.65, "ow": 2, "ol": 4, "omn": -27.27, "aw": 4, "al": 3, "amn": -6.38}, "GONZ": {"gw": 11, "gl": 12, "gmn": 78.76, "ow": 4, "ol": 6, "omn": -48.43, "aw": 5, "al": 6, "amn": 89.14}, "DUKE": {"gw": 6, "gl": 13, "gmn": -198.37, "ow": 1, "ol": 5, "omn": -69.48, "aw": 3, "al": 5, "amn": -86.25}, "SCAR": {"gw": 4, "gl": 6, "gmn": -8.87, "ow": 4, "ol": 2, "omn": 50.63, "aw": 0, "al": 3, "amn": -34.5}, "ALA": {"gw": 12, "gl": 17, "gmn": -43.61, "ow": 3, "ol": 5, "omn": -9.0, "aw": 8, "al": 9, "amn": -17.11}, "UK": {"gw": 13, "gl": 12, "gmn": 5.69, "ow": 7, "ol": 9, "omn": -60.96, "aw": 6, "al": 3, "amn": 66.64}, "ARK": {"gw": 12, "gl": 14, "gmn": -10.29, "ow": 8, "ol": 5, "omn": 116.84, "aw": 4, "al": 8, "amn": -117.13}, "DRKE": {"gw": 1, "gl": 2, "gmn": 3.74, "ow": 0, "ol": 1, "omn": -10.0, "aw": 1, "al": 1, "amn": 13.74}, "L-IL": {"gw": 6, "gl": 8, "gmn": 28.07, "ow": 2, "ol": 1, "omn": 8.47, "aw": 2, "al": 6, "amn": -4.5}, "WVU": {"gw": 3, "gl": 4, "gmn": -39.11, "ow": 1, "ol": 3, "omn": -48.2, "aw": 2, "al": 1, "amn": 9.09}, "OKLA": {"gw": 6, "gl": 3, "gmn": 39.19, "ow": 5, "ol": 3, "omn": 16.47, "aw": 1, "al": 0, "amn": 22.73}, "AUB": {"gw": 9, "gl": 17, "gmn": -164.09, "ow": 4, "ol": 8, "omn": -81.05, "aw": 5, "al": 7, "amn": -43.04}, "CREI": {"gw": 12, "gl": 8, "gmn": 66.61, "ow": 6, "ol": 2, "omn": 89.08, "aw": 5, "al": 6, "amn": -47.47}, "VILL": {"gw": 11, "gl": 7, "gmn": 85.8, "ow": 4, "ol": 4, "omn": 17.0, "aw": 7, "al": 2, "amn": 84.06}, "WSU": {"gw": 3, "gl": 0, "gmn": 43.99, "ow": 0, "ol": 0, "omn": 0, "aw": 3, "al": 0, "amn": 43.99}, "USC": {"gw": 4, "gl": 4, "gmn": -0.8, "ow": 1, "ol": 2, "omn": -21.36, "aw": 2, "al": 1, "amn": 21.82}, "MICH": {"gw": 36, "gl": 28, "gmn": 540.91, "ow": 27, "ol": 16, "omn": 520.17, "aw": 7, "al": 7, "amn": 45.1}, "MD": {"gw": 6, "gl": 8, "gmn": -9.44, "ow": 1, "ol": 2, "omn": -45.24, "aw": 5, "al": 5, "amn": 45.8}, "FSU": {"gw": 6, "gl": 4, "gmn": 43.21, "ow": 3, "ol": 3, "omn": -2.17, "aw": 3, "al": 1, "amn": 45.38}, "UVA": {"gw": 4, "gl": 2, "gmn": 29.37, "ow": 1, "ol": 0, "omn": 12.61, "aw": 3, "al": 2, "amn": 16.77}, "VCU": {"gw": 3, "gl": 5, "gmn": -16.93, "ow": 1, "ol": 2, "omn": -15.91, "aw": 1, "al": 1, "amn": -2.27}, "UNC": {"gw": 8, "gl": 15, "gmn": -130.1, "ow": 4, "ol": 3, "omn": 13.39, "aw": 4, "al": 8, "amn": -56.48}, "PSU": {"gw": 5, "gl": 1, "gmn": 104.19, "ow": 2, "ol": 0, "omn": 43.48, "aw": 3, "al": 1, "amn": 60.72}, "OSU": {"gw": 8, "gl": 9, "gmn": -19.95, "ow": 3, "ol": 6, "omn": -94.48, "aw": 5, "al": 2, "amn": 89.53}, "RUTG": {"gw": 2, "gl": 8, "gmn": -117.73, "ow": 0, "ol": 3, "omn": -55.0, "aw": 2, "al": 4, "amn": -34.23}, "ORE": {"gw": 3, "gl": 7, "gmn": -117.42, "ow": 1, "ol": 2, "omn": -25.82, "aw": 1, "al": 4, "amn": -55.35}, "COLO": {"gw": 7, "gl": 4, "gmn": 45.89, "ow": 6, "ol": 3, "omn": 57.95, "aw": 1, "al": 1, "amn": -12.07}, "CONN": {"gw": 19, "gl": 19, "gmn": 27.61, "ow": 14, "ol": 6, "omn": 156.29, "aw": 5, "al": 11, "amn": -108.69}, "ILL": {"gw": 9, "gl": 3, "gmn": 124.33, "ow": 7, "ol": 1, "omn": 143.9, "aw": 2, "al": 2, "amn": -19.57}, "LSU": {"gw": 0, "gl": 7, "gmn": -120.0, "ow": 0, "ol": 2, "omn": -30.0, "aw": 0, "al": 3, "amn": -50.0}, "USF": {"gw": 2, "gl": 4, "gmn": -55.91, "ow": 0, "ol": 1, "omn": -25.0, "aw": 1, "al": 1, "amn": -18.41}, "IOWA": {"gw": 7, "gl": 3, "gmn": 93.02, "ow": 2, "ol": 1, "omn": 22.67, "aw": 2, "al": 1, "amn": 12.45}, "IND": {"gw": 10, "gl": 5, "gmn": 65.99, "ow": 5, "ol": 2, "omn": 60.38, "aw": 4, "al": 3, "amn": -6.89}, "LOU": {"gw": 0, "gl": 6, "gmn": -126.5, "ow": 0, "ol": 2, "omn": -35.0, "aw": 0, "al": 4, "amn": -91.5}, "ISU": {"gw": 9, "gl": 7, "gmn": 101.11, "ow": 5, "ol": 2, "omn": 72.62, "aw": 4, "al": 4, "amn": 38.49}, "TCU": {"gw": 4, "gl": 3, "gmn": 37.22, "ow": 2, "ol": 0, "omn": 47.65, "aw": 2, "al": 3, "amn": -10.42}, "KU": {"gw": 9, "gl": 17, "gmn": -113.8, "ow": 4, "ol": 6, "omn": -64.74, "aw": 4, "al": 8, "amn": -12.05}, "BAY": {"gw": 15, "gl": 6, "gmn": 156.68, "ow": 9, "ol": 2, "omn": 117.78, "aw": 6, "al": 4, "amn": 38.9}, "SJU": {"gw": 7, "gl": 5, "gmn": 19.24, "ow": 5, "ol": 3, "omn": 12.41, "aw": 2, "al": 1, "amn": 22.08}, "PROV": {"gw": 6, "gl": 9, "gmn": -102.1, "ow": 4, "ol": 4, "omn": -17.95, "aw": 2, "al": 5, "amn": -84.14}, "UNO": {"gw": 3, "gl": 1, "gmn": -8.45, "ow": 1, "ol": 1, "omn": -19.66, "aw": 2, "al": 0, "amn": 11.2}, "UNLV": {"gw": 0, "gl": 3, "gmn": -62.0, "ow": 0, "ol": 0, "omn": 0, "aw": 0, "al": 3, "amn": -62.0}, "SDSU": {"gw": 8, "gl": 3, "gmn": 132.23, "ow": 2, "ol": 2, "omn": 25.23, "aw": 5, "al": 1, "amn": 92.01}, "SFA": {"gw": 2, "gl": 1, "gmn": 29.42, "ow": 0, "ol": 1, "omn": -10.0, "aw": 1, "al": 0, "amn": 14.42}, "MSST": {"gw": 5, "gl": 1, "gmn": 69.87, "ow": 0, "ol": 0, "omn": 0, "aw": 5, "al": 1, "amn": 69.87}, "UCLA": {"gw": 7, "gl": 6, "gmn": 55.69, "ow": 1, "ol": 1, "omn": -1.19, "aw": 5, "al": 5, "amn": 43.84}, "UNCG": {"gw": 2, "gl": 1, "gmn": 2.4, "ow": 1, "ol": 0, "omn": 8.7, "aw": 1, "al": 1, "amn": -6.3}, "APP": {"gw": 0, "gl": 3, "gmn": -47.5, "ow": 0, "ol": 1, "omn": -10.0, "aw": 0, "al": 1, "amn": -10.0}, "UNCO": {"gw": 1, "gl": 3, "gmn": -32.5, "ow": 1, "ol": 3, "omn": -32.5, "aw": 0, "al": 0, "amn": 0}, "SAC": {"gw": 1, "gl": 4, "gmn": -66.0, "ow": 0, "ol": 2, "omn": -56.0, "aw": 0, "al": 1, "amn": -10.0}, "PRST": {"gw": 2, "gl": 1, "gmn": 8.75, "ow": 0, "ol": 0, "omn": 0, "aw": 1, "al": 1, "amn": -1.25}, "NAU": {"gw": 4, "gl": 0, "gmn": 80.12, "ow": 2, "ol": 0, "omn": 47.39, "aw": 0, "al": 0, "amn": 0}, "CLEM": {"gw": 6, "gl": 6, "gmn": 57.13, "ow": 3, "ol": 2, "omn": 31.29, "aw": 0, "al": 3, "amn": -43.25}, "MIA": {"gw": 4, "gl": 7, "gmn": -78.75, "ow": 1, "ol": 4, "omn": -70.56, "aw": 1, "al": 3, "amn": -42.28}, "ASU": {"gw": 3, "gl": 1, "gmn": 45.22, "ow": 1, "ol": 1, "omn": -15.48, "aw": 1, "al": 0, "amn": 35.7}, "DEP": {"gw": 1, "gl": 3, "gmn": -28.6, "ow": 0, "ol": 1, "omn": -13.75, "aw": 1, "al": 2, "amn": -14.85}, "VT": {"gw": 3, "gl": 2, "gmn": 30.87, "ow": 2, "ol": 1, "omn": 27.23, "aw": 1, "al": 0, "amn": 13.64}, "GTWN": {"gw": 3, "gl": 7, "gmn": -84.56, "ow": 2, "ol": 4, "omn": -49.79, "aw": 1, "al": 2, "amn": -6.02}, "BUFF": {"gw": 2, "gl": 1, "gmn": 19.59, "ow": 0, "ol": 1, "omn": -14.5, "aw": 1, "al": 0, "amn": 9.09}, "OHIO": {"gw": 2, "gl": 1, "gmn": 3.68, "ow": 2, "ol": 0, "omn": 18.18, "aw": 0, "al": 1, "amn": -14.5}, "FLA": {"gw": 11, "gl": 10, "gmn": 7.98, "ow": 5, "ol": 3, "omn": 8.38, "aw": 5, "al": 3, "amn": 37.85}, "ORU": {"gw": 4, "gl": 1, "gmn": 27.47, "ow": 4, "ol": 0, "omn": 42.47, "aw": 0, "al": 1, "amn": -15.0}, "TENN": {"gw": 9, "gl": 7, "gmn": 16.1, "ow": 3, "ol": 2, "omn": 14.73, "aw": 5, "al": 3, "amn": 31.82}, "ORST": {"gw": 4, "gl": 2, "gmn": 1.75, "ow": 2, "ol": 1, "omn": -1.89, "aw": 0, "al": 1, "amn": -10.0}, "TTU": {"gw": 11, "gl": 4, "gmn": 119.76, "ow": 7, "ol": 0, "omn": 104.98, "aw": 3, "al": 3, "amn": 12.38}, "OKST": {"gw": 2, "gl": 2, "gmn": 14.11, "ow": 2, "ol": 2, "omn": 14.11, "aw": 0, "al": 0, "amn": 0.0}, "HOU": {"gw": 9, "gl": 14, "gmn": -152.62, "ow": 5, "ol": 8, "omn": -72.2, "aw": 3, "al": 4, "amn": -60.42}, "WAKE": {"gw": 4, "gl": 5, "gmn": -30.26, "ow": 1, "ol": 3, "omn": -48.26, "aw": 2, "al": 2, "amn": 8.1}, "PUR": {"gw": 10, "gl": 6, "gmn": 120.5, "ow": 4, "ol": 2, "omn": 80.05, "aw": 5, "al": 3, "amn": 10.45}, "KSU": {"gw": 6, "gl": 7, "gmn": -47.7, "ow": 3, "ol": 4, "omn": -46.79, "aw": 2, "al": 2, "amn": 6.09}, "TEX": {"gw": 7, "gl": 6, "gmn": 0.58, "ow": 2, "ol": 3, "omn": -16.44, "aw": 5, "al": 2, "amn": 32.02}, "NW": {"gw": 5, "gl": 4, "gmn": 18.56, "ow": 1, "ol": 1, "omn": -2.27, "aw": 4, "al": 3, "amn": 20.84}, "NKU": {"gw": 0, "gl": 3, "gmn": -60.0, "ow": 0, "ol": 0, "omn": 0, "aw": 0, "al": 2, "amn": -50.0}, "SMC": {"gw": 6, "gl": 7, "gmn": 35.69, "ow": 0, "ol": 3, "omn": -48.75, "aw": 6, "al": 4, "amn": 84.44}, "NCST": {"gw": 4, "gl": 4, "gmn": 102.95, "ow": 1, "ol": 2, "omn": 66.5, "aw": 3, "al": 2, "amn": 36.45}, "MARQ": {"gw": 7, "gl": 5, "gmn": 194.44, "ow": 1, "ol": 3, "omn": 10.0, "aw": 6, "al": 2, "amn": 184.44}, "MIZZ": {"gw": 2, "gl": 3, "gmn": -32.67, "ow": 0, "ol": 1, "omn": -25.0, "aw": 2, "al": 1, "amn": 8.08}, "XAV": {"gw": 6, "gl": 3, "gmn": 132.77, "ow": 2, "ol": 2, "omn": 6.88, "aw": 4, "al": 0, "amn": 154.64}, "FAU": {"gw": 6, "gl": 2, "gmn": 70.95, "ow": 4, "ol": 0, "omn": 77.14, "aw": 1, "al": 2, "amn": -21.19}, "UAB": {"gw": 2, "gl": 3, "gmn": -35.59, "ow": 2, "ol": 2, "omn": -10.59, "aw": 0, "al": 1, "amn": -25.0}, "ARIZ": {"gw": 13, "gl": 13, "gmn": 30.25, "ow": 3, "ol": 2, "omn": 41.33, "aw": 7, "al": 8, "amn": -27.38}, "DAY": {"gw": 1, "gl": 3, "gmn": -52.68, "ow": 0, "ol": 2, "omn": -50.0, "aw": 0, "al": 1, "amn": -25.0}, "BSU": {"gw": 4, "gl": 1, "gmn": 42.38, "ow": 2, "ol": 1, "omn": 18.98, "aw": 2, "al": 0, "amn": 23.4}, "TXAM": {"gw": 7, "gl": 6, "gmn": 80.64, "ow": 2, "ol": 4, "omn": -50.76, "aw": 5, "al": 1, "amn": 158.9}, "GC": {"gw": 9, "gl": 3, "gmn": 194.91, "ow": 8, "ol": 3, "omn": 169.91, "aw": 0, "al": 0, "amn": 0}, "MEM": {"gw": 0, "gl": 4, "gmn": -97.5, "ow": 0, "ol": 2, "omn": -45.0, "aw": 0, "al": 2, "amn": -52.5}, "PRIN": {"gw": 1, "gl": 2, "gmn": -28.26, "ow": 0, "ol": 1, "omn": -25.0, "aw": 1, "al": 1, "amn": -3.26}, "COFC": {"gw": 3, "gl": 1, "gmn": 34.82, "ow": 0, "ol": 1, "omn": -25.0, "aw": 2, "al": 0, "amn": 34.82}, "CIN": {"gw": 5, "gl": 3, "gmn": 14.33, "ow": 1, "ol": 0, "omn": 21.19, "aw": 3, "al": 2, "amn": 10.65}, "CSU": {"gw": 3, "gl": 3, "gmn": 10.23, "ow": 2, "ol": 0, "omn": 47.73, "aw": 0, "al": 3, "amn": -62.5}, "UGA": {"gw": 3, "gl": 3, "gmn": 4.33, "ow": 2, "ol": 2, "omn": -1.42, "aw": 1, "al": 1, "amn": 5.75}, "UVM": {"gw": 3, "gl": 1, "gmn": 36.36, "ow": 0, "ol": 0, "omn": 0, "aw": 0, "al": 0, "amn": 0}, "UCF": {"gw": 3, "gl": 1, "gmn": 23.86, "ow": 1, "ol": 1, "omn": -2.27, "aw": 2, "al": 0, "amn": 26.14}, "MISS": {"gw": 4, "gl": 2, "gmn": 74.83, "ow": 1, "ol": 2, "omn": -6.5, "aw": 2, "al": 0, "amn": 45.93}, "YALE": {"gw": 3, "gl": 4, "gmn": -45.39, "ow": 3, "ol": 1, "omn": 29.61, "aw": 0, "al": 3, "amn": -75.0}, "UNM": {"gw": 3, "gl": 2, "gmn": 74.14, "ow": 1, "ol": 2, "omn": -23.26, "aw": 1, "al": 0, "amn": 37.5}, "USU": {"gw": 4, "gl": 3, "gmn": 12.99, "ow": 0, "ol": 3, "omn": -67.0, "aw": 3, "al": 0, "amn": 57.26}, "FRES": {"gw": 3, "gl": 0, "gmn": 73.15, "ow": 1, "ol": 0, "omn": 25.0, "aw": 2, "al": 0, "amn": 48.15}, "LMU": {"gw": 0, "gl": 3, "gmn": -80.0, "ow": 0, "ol": 2, "omn": -55.0, "aw": 0, "al": 0, "amn": 0}, "SF": {"gw": 1, "gl": 3, "gmn": -54.17, "ow": 1, "ol": 1, "omn": -4.17, "aw": 0, "al": 1, "amn": -25.0}, "AKR": {"gw": 0, "gl": 4, "gmn": -74.5, "ow": 0, "ol": 2, "omn": -35.0, "aw": 0, "al": 1, "amn": -14.5}, "OAK": {"gw": 1, "gl": 2, "gmn": -21.0, "ow": 1, "ol": 0, "omn": 24.0, "aw": 0, "al": 1, "amn": -25.0}, "MCNS": {"gw": 2, "gl": 2, "gmn": 37.5, "ow": 0, "ol": 2, "omn": -35.0, "aw": 0, "al": 0, "amn": 0}, "SDST": {"gw": 1, "gl": 2, "gmn": -51.85, "ow": 0, "ol": 1, "omn": -25.0, "aw": 0, "al": 0, "amn": 0}, "ME": {"gw": 2, "gl": 4, "gmn": -26.77, "ow": 0, "ol": 2, "omn": -24.5, "aw": 1, "al": 1, "amn": 0.0}, "UL": {"gw": 1, "gl": 2, "gmn": -29.5, "ow": 0, "ol": 1, "omn": -29.5, "aw": 0, "al": 1, "amn": -25.0}, "STAN": {"gw": 2, "gl": 1, "gmn": 18.65, "ow": 1, "ol": 0, "omn": 23.15, "aw": 0, "al": 1, "amn": -29.5}, "WASH": {"gw": 1, "gl": 2, "gmn": -18.02, "ow": 0, "ol": 1, "omn": -13.75, "aw": 1, "al": 1, "amn": -4.27}, "VAN": {"gw": 2, "gl": 4, "gmn": -30.25, "ow": 0, "ol": 2, "omn": -32.75, "aw": 2, "al": 2, "amn": 2.5}, "SLU": {"gw": 1, "gl": 3, "gmn": -45.91, "ow": 1, "ol": 1, "omn": -5.91, "aw": 0, "al": 1, "amn": -30.0}, "UVU": {"gw": 2, "gl": 1, "gmn": 22.39, "ow": 0, "ol": 0, "omn": 0, "aw": 2, "al": 1, "amn": 22.39}, "GMU": {"gw": 0, "gl": 5, "gmn": -43.25, "ow": 0, "ol": 3, "omn": -19.5, "aw": 0, "al": 1, "amn": -10.0}, "MSM": {"gw": 1, "gl": 2, "gmn": -27.5, "ow": 1, "ol": 2, "omn": -27.5, "aw": 0, "al": 0, "amn": 0}, "PRE": {"gw": 1, "gl": 5, "gmn": -83.0, "ow": 0, "ol": 1, "omn": -27.5, "aw": 0, "al": 3, "amn": -55.5}, "USD": {"gw": 2, "gl": 1, "gmn": 17.47, "ow": 0, "ol": 0, "omn": 0, "aw": 1, "al": 0, "amn": 21.74}, "IUIN": {"gw": 4, "gl": 2, "gmn": 46.25, "ow": 0, "ol": 0, "omn": 0, "aw": 2, "al": 0, "amn": 50.0}, "CIT": {"gw": 0, "gl": 3, "gmn": -54.5, "ow": 0, "ol": 2, "omn": -27.0, "aw": 0, "al": 0, "amn": 0}, "ILST": {"gw": 0, "gl": 3, "gmn": -67.5, "ow": 0, "ol": 0, "omn": 0, "aw": 0, "al": 0, "amn": 0}, "MAN": {"gw": 1, "gl": 2, "gmn": -30.0, "ow": 0, "ol": 1, "omn": -27.5, "aw": 0, "al": 0, "amn": 0}, "LBSU": {"gw": 1, "gl": 2, "gmn": -31.51, "ow": 1, "ol": 0, "omn": 21.74, "aw": 0, "al": 0, "amn": 0}, "NJIT": {"gw": 1, "gl": 2, "gmn": -45.0, "ow": 1, "ol": 2, "omn": -45.0, "aw": 0, "al": 0, "amn": 0}, "ALST": {"gw": 2, "gl": 1, "gmn": 27.35, "ow": 0, "ol": 0, "omn": 0, "aw": 1, "al": 0, "amn": 13.35}};
+const ESPN_ABBREV    = {"Michigan": "MICH", "Michigan State": "MSU", "Wisconsin": "WIS", "Minnesota": "MINN", "Nebraska": "NEB", "Indiana": "IND", "Purdue": "PUR", "Ohio State": "OSU", "Illinois": "ILL", "Maryland": "MD", "Rutgers": "RUTG", "Northwestern": "NW", "Iowa": "IOWA", "Penn State": "PSU", "UCLA": "UCLA", "USC": "USC", "Oregon": "ORE", "Washington": "WASH", "Duke": "DUKE", "North Carolina": "UNC", "Wake Forest": "WAKE", "Clemson": "CLEM", "Florida State": "FSU", "Louisville": "LOU", "Pittsburgh": "PITT", "Syracuse": "SYR", "Boston College": "BC", "Virginia Tech": "VT", "Virginia": "UVA", "Miami": "MIA", "Notre Dame": "ND", "Georgia Tech": "GT", "NC State": "NCST", "Cal": "CAL", "Stanford": "STAN", "SMU": "SMU", "Texas": "TEX", "Oklahoma": "OKLA", "Oklahoma State": "OKST", "Kansas": "KU", "Kansas State": "KSU", "Iowa State": "ISU", "West Virginia": "WVU", "TCU": "TCU", "Baylor": "BAY", "Texas Tech": "TTU", "Houston": "HOU", "Cincinnati": "CIN", "UCF": "UCF", "BYU": "BYU", "Alabama": "ALA", "Auburn": "AUB", "Arkansas": "ARK", "Vanderbilt": "VAN", "South Carolina": "SCAR", "Mississippi": "MISS", "Ole Miss": "MISS", "Mississippi State": "MSST", "LSU": "LSU", "Tennessee": "TENN", "Kentucky": "UK", "Florida": "FLA", "Georgia": "UGA", "Texas A&M": "TXAM", "UConn": "CONN", "Connecticut": "CONN", "Villanova": "VILL", "Providence": "PROV", "Georgetown": "GTWN", "Butler": "BUT", "Creighton": "CREI", "Marquette": "MARQ", "St. John's": "SJU", "Seton Hall": "SHU", "DePaul": "DEP", "Xavier": "XAV", "Gonzaga": "GONZ", "Saint Mary's": "SMC", "San Diego": "USD", "San Francisco": "SF", "Loyola Marymount": "LMU", "Portland": "PORT", "Pepperdine": "PEPP", "Santa Clara": "SCU", "San Diego State": "SDSU", "UNLV": "UNLV", "New Mexico": "UNM", "Wyoming": "WYO", "Nevada": "NEV", "Boise State": "BSU", "Colorado State": "CSU", "Utah State": "USU", "Air Force": "AF", "Missouri": "MIZZ", "Arizona": "ARIZ", "Arizona State": "ASU", "Colorado": "COLO", "Utah": "UTAH", "Oregon State": "ORST", "Washington State": "WSU", "Dayton": "DAY", "VCU": "VCU", "Richmond": "RICH", "Davidson": "DAV", "Rhode Island": "URI", "George Mason": "GMU", "Wichita State": "WICH", "Temple": "TEM", "Memphis": "MEM", "South Florida": "USF", "East Carolina": "ECU", "UAB": "UAB", "Florida Atlantic": "FAU", "Charlotte": "CHAR", "UTSA": "UTSA", "North Texas": "UNT", "Rice": "RICE", "Tulsa": "TULSA", "Tulane": "TUL", "Drake": "DRKE", "Bradley": "BRAD", "Missouri State": "MOSU", "Illinois State": "ILST", "Indiana State": "INST", "Loyola Chicago": "L-IL", "Appalachian State": "APP", "Troy": "TROY", "Ohio": "OHIO", "Akron": "AKR", "Kent State": "KENT", "Buffalo": "BUFF", "Bowling Green": "BGSU", "Ball State": "BST", "Central Michigan": "CMU", "Western Michigan": "WMU", "Eastern Michigan": "EMU", "Northern Illinois": "NIU", "Miami (Ohio)": "MIOH", "St. Francis NY": "SFNY", "LIU": "LIU", "Lipscomb": "LIP", "Campbell": "CAN", "Presbyterian": "PRE", "UNC Asheville": "UNCA", "Jackson State": "JKST", "Southern": "SOU", "Furman": "FUR", "Wofford": "WOF", "Mercer": "MER", "Chattanooga": "CHAT", "VMI": "VMI", "Samford": "SAM", "ETSU": "ETSU", "Western Carolina": "WCU", "Oral Roberts": "ORU", "North Dakota State": "NDSU", "South Dakota State": "SDST", "Denver": "DEN", "Nebraska Omaha": "UNO", "Kansas City": "UMKC", "Western Illinois": "WIU", "George Washington": "GW", "Fordham": "FOR", "La Salle": "LAS", "Saint Joseph's": "JOES", "Duquesne": "DUQ", "Saint Louis": "SLU", "Harvard": "HAR", "Yale": "YALE", "Princeton": "PRIN", "Dartmouth": "DART", "Cornell": "COR", "Penn": "PENN", "Colgate": "COLG", "Lehigh": "LEH", "Bucknell": "BUCK", "Army": "ARMY", "Navy": "NAVY", "Stony Brook": "STON", "Albany": "ALBY", "UMBC": "UMBC", "Vermont": "UVM", "New Hampshire": "UNH", "Maine": "ME", "Binghamton": "BING", "Hartford": "HART", "James Madison": "JMU", "Towson": "TOWS", "Delaware": "DEL", "Northeastern": "NE", "Drexel": "DREX", "Hofstra": "HOF", "William & Mary": "WM", "Elon": "ELON", "NC A&T": "NCAT", "Norfolk State": "NORF", "Howard": "HOW", "Morgan State": "MORG", "Coppin State": "COPP", "Hampton": "HAM", "Texas Southern": "TXSO", "Florida A&M": "FAMU", "Grambling": "GRAM", "Alabama A&M": "AAMU", "Alabama State": "ALST", "Prairie View A&M": "PRST", "Tennessee State": "TNST", "Stephen F. Austin": "SFA", "Nicholls": "NICH", "McNeese": "MCNS", "Tarleton": "TARL", "Southeastern Louisiana": "SELA", "Georgia Southern": "GASO", "Coastal Carolina": "COFC", "South Alabama": "USA", "Arkansas State": "AST", "Louisiana": "UL", "UL Monroe": "ULM", "Texas State": "TXST", "Quinnipiac": "QUIN", "Fairfield": "FAIR", "Iona": "IONA", "Manhattan": "MAN", "Niagara": "NIA", "Canisius": "CAN2", "Rider": "RID", "Monmouth": "MONM", "Valparaiso": "VALP", "Northern Kentucky": "NKU", "Milwaukee": "MIL", "Green Bay": "GB", "Wright State": "WRST", "Cleveland State": "CLEV", "Detroit Mercy": "DET", "Youngstown State": "YSU", "IUPUI": "IUIN", "Sacramento State": "SAC", "Cal Poly": "CP", "Long Beach State": "LBSU", "UC Irvine": "UCI", "UC San Diego": "UCSD", "Cal State Fullerton": "CSF", "UC Santa Barbara": "UCSB", "UC Riverside": "UCR", "Cal State Northridge": "CSUN", "Idaho": "IDHO", "Idaho State": "IDST", "Weber State": "WEB", "Montana": "MONT", "Montana State": "MTST", "Northern Arizona": "NAU", "Southern Utah": "SUU", "Portland State": "PST", "Eastern Washington": "EWU", "Seattle": "SEA", "NJIT": "NJIT", "Bryant": "BRY", "Robert Morris": "RMU", "St. Francis (PA)": "SFC", "Sacred Heart": "SHU2", "Fairleigh Dickinson": "FDU", "Wagner": "WAG", "St. Francis (NY)": "SFNY", "High Point": "HP", "Winthrop": "WIN", "Gardner-Webb": "GAST", "North Carolina A&T": "NCAT", "Kennesaw State": "KENN", "Stetson": "STET", "Florida Gulf Coast": "FGCU", "Jacksonville": "JAX", "North Florida": "UNF", "Bellarmine": "BELL", "Purdue Fort Wayne": "PFW", "Grand Canyon": "GC", "Utah Valley": "UVU", "Utah Tech": "UTU", "Cal Baptist": "CBU", "UT Arlington": "UTA", "Houston Christian": "UST", "West Georgia": "UWG", "Seattle U": "SEA", "Pacific": "PAC", "San Jose State": "SJSU", "Fresno State": "FRES", "Hawaii": "HAW", "Oakland": "OAK", "Detroit": "DET", "SIU Edwardsville": "SIUE", "Southeast Missouri State": "SEMO", "Tennessee-Martin": "UTM", "Murray State": "MUR", "Eastern Kentucky": "EKU", "Belmont": "BEL", "Austin Peay": "AC", "UT Martin": "UTM", "Jacksonville State": "JST", "Lindenwood": "LIND", "Southern Indiana": "USI", "St. Thomas": "STTM", "Queens": "QU", "Tarleton State": "TARL", "Arkansas-Pine Bluff": "ARPB", "Alcorn State": "ALCN", "Mississippi Valley State": "MVSU", "Bethune-Cookman": "BCU", "Savannah State": "SAVST", "Maryland-Eastern Shore": "UMES", "Delaware State": "DEST", "North Carolina Central": "NCCU", "Winston-Salem State": "WSST", "Mount St. Mary's": "MSM", "Longwood": "LONG", "South Carolina State": "SCST"};
+
+function getTeamHistHTML(name) {
+  if (!name) return '';
+  const abbrev = ESPN_ABBREV[name];
+  if (!abbrev) return '';
+  const h = BET_TEAM_STATS[abbrev];
+  if (!h) return '';
+  const gCls = h.gmn >= 0 ? 'hist-pos' : 'hist-neg';
+  const mainTag = `<span class="team-hist ${gCls}" title="All games involving ${abbrev}">${h.gw}-${h.gl}</span>`;
+  const onTag   = (h.ow+h.ol > 0)
+    ? `<span class="team-hist-fn ${h.omn>=0?'hist-pos':'hist-neg'}" title="Betting ON ${abbrev}">On:${h.ow}-${h.ol}</span>`
+    : '';
+  const agTag   = (h.aw+h.al > 0)
+    ? `<span class="team-hist-fn ${h.amn>=0?'hist-pos':'hist-neg'}" title="Betting AGAINST ${abbrev}">Vs:${h.aw}-${h.al}</span>`
+    : '';
+  return mainTag + onTag + agTag;
+}
+
+// DRAG & DROP / FILE
+// ─────────────────────────────────────────────────────────────
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) processXLSX(e.dataTransfer.files[0]); });
+function handleFile(e) { if (e.target.files[0]) processXLSX(e.target.files[0]); }
+
+// Body-level drop — catches new xlsx drops after upload zone is hidden
+document.body.addEventListener('dragover', e => { e.preventDefault(); });
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f && /\.xlsx?$/i.test(f.name)) processXLSX(f);
+});
+
+// ─────────────────────────────────────────────────────────────
+// XLSX PARSE
+// ─────────────────────────────────────────────────────────────
+function processXLSX(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+    const sn = wb.SheetNames.includes('Current Data') ? 'Current Data'
+             : wb.SheetNames.includes('Board Data')    ? 'Board Data'
+             : wb.SheetNames.includes('Board')         ? 'Board'
+             : wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { defval:null });
+
+    // Build Best Bets lookup map from "Best Bet Data" sheet + store all EM plays
+    bestBetsMap = {}; // reset top-level map for fresh upload
+    allEMPlays = [];
+    if (wb.SheetNames.includes('Best Bet Data')) {
+      const bbRows = XLSX.utils.sheet_to_json(wb.Sheets['Best Bet Data'], { defval: '' });
+      bbRows.forEach(r => {
+        const home = String(r.home || '').trim();
+        const away = String(r.away || '').trim();
+        const play = String(r.play || '').trim();
+        const threshPlay = String(r.thresh_play || '').trim();
+        if (home && away) {
+          if (play !== '') {
+            const key = home.toLowerCase() + '|||' + away.toLowerCase();
+            bestBetsMap[key] = play;
+          }
+          allEMPlays.push({
+            home, away, play, threshPlay,
+            emLine:    r.line       != null ? +r.line       : null,
+            vegasLine: r.vegas_line != null ? +r.vegas_line : null,
+            homeRank:  r.home_rank  != null ? +r.home_rank  : null,
+            awayRank:  r.away_rank  != null ? +r.away_rank  : null,
+            date:      String(r.Date || r.date || '').trim(),
+            time:      String(r.time || '').trim(),
+            venue:     String(r.Venue || r.venue || '').trim(),
+          });
+        }
+      });
+    }
+
+    emGames = rows
+      .filter(r => r.home && r.away && r.line != null && r.vegas_line != null)
+      .map(r => {
+        // Parse date field → 'YYYYMMDD' string  (Bug 1 fix: handle both r.date and r.Date)
+        let gameDate = null;
+        const rawDate = r.date != null ? r.date : (r.Date != null ? r.Date : null);
+        if (rawDate != null) {
+          const d = rawDate instanceof Date ? rawDate : new Date(rawDate);
+          if (!isNaN(d)) {
+            gameDate = String(d.getFullYear()) +
+              String(d.getMonth()+1).padStart(2,'0') +
+              String(d.getDate()).padStart(2,'0');
+          }
+        }
+        const bbKey = String(r.home || '').trim().toLowerCase() + '|||' + String(r.away || '').trim().toLowerCase();
+        return {
+          home:        r.home,
+          away:        r.away,
+          time:        r.time || '',
+          emLine:      +r.line,
+          vegasLine:   +r.vegas_line,
+          emOU:        r.ou        != null ? +r.ou        : null,
+          vegasOU:     r.vegas_ou  != null ? +r.vegas_ou  : null,
+          venue:       r.Venue || r.venue || '',
+          homeRank:    r.home_rank != null ? +r.home_rank : null,
+          awayRank:    r.away_rank != null ? +r.away_rank : null,
+          gameDate,
+          isBestBet:   bestBetsMap.hasOwnProperty(bbKey),
+          bestBetPlay: bestBetsMap[bbKey] || null,
+        };
+      });
+
+    zone.style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    buildDateDropdown();
+    const dispDate = selectedDate
+      ? new Date(selectedDate.slice(0,4)+'-'+selectedDate.slice(4,6)+'-'+selectedDate.slice(6,8))
+          .toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})
+      : new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+    document.getElementById('headerSub').textContent = `EvanMiya · ${dispDate}`;
+
+    buildMerged();
+    setESPNStatus('loading');
+    fetchESPN();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ─────────────────────────────────────────────────────────────
+// DATE DROPDOWN
+// ─────────────────────────────────────────────────────────────
+function buildDateDropdown() {
+  const dates = [...new Set(emGames.map(g => g.gameDate).filter(Boolean))].sort();
+  const sel = document.getElementById('datePicker');
+  if (!dates.length) { sel.style.display = 'none'; return; }
+
+  // Today as YYYYMMDD in local time
+  const now = new Date();
+  const todayStr = String(now.getFullYear()) +
+    String(now.getMonth()+1).padStart(2,'0') +
+    String(now.getDate()).padStart(2,'0');
+
+  // Default: today if present, else nearest date by absolute distance
+  let defaultDate = dates.find(d => d === todayStr);
+  if (!defaultDate) {
+    const todayNum = parseInt(todayStr);
+    let bestDist = Infinity;
+    dates.forEach(d => {
+      const dist = Math.abs(parseInt(d) - todayNum);
+      if (dist < bestDist) { bestDist = dist; defaultDate = d; }
+    });
+  }
+
+  sel.innerHTML = dates.map(d => {
+    const label = `${d.slice(4,6)}/${d.slice(6,8)}/${d.slice(0,4)}`;
+    return `<option value="${d}"${d === defaultDate ? ' selected' : ''}>${label}</option>`;
+  }).join('');
+
+  sel.style.display = '';
+  selectedDate = defaultDate;
+}
+
+function onDateChange(val) {
+  selectedDate = val;
+  // Update subtitle
+  const d = new Date(val.slice(0,4)+'-'+val.slice(4,6)+'-'+val.slice(6,8));
+  document.getElementById('headerSub').textContent =
+    `EvanMiya · ${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}`;
+  buildMerged();
+  setESPNStatus('loading');
+  fetchESPN();
+}
+
+// ─────────────────────────────────────────────────────────────
+// ESPN STATUS
+// ─────────────────────────────────────────────────────────────
+function setESPNStatus(state) {
+  const el = document.getElementById('espnStatus');
+  if (!el) return;
+  const map = { loading:['⟳ ESPN','#8b949e'], ok:['● ESPN Live','#3fb950'], error:['✕ ESPN Offline','#f85149'] };
+  const [label, color] = map[state] || map.error;
+  el.textContent = label; el.style.color = color;
+}
+
+// ─────────────────────────────────────────────────────────────
+// ESPN FETCH
+// ─────────────────────────────────────────────────────────────
+async function fetchESPN() {
+  try {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // Build dateStr from selected date or today (YYYYMMDD)
+    const dateStr = selectedDate || (() => {
+      const t = new Date();
+      return String(t.getFullYear()) +
+        String(t.getMonth()+1).padStart(2,'0') +
+        String(t.getDate()).padStart(2,'0');
+    })();
+    const url = isLocal
+      ? '/api/espn'
+      : `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50&limit=300&dates=${dateStr}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    espnGames = {};
+    (data.events || []).forEach(ev => {
+      const comp = ev.competitions[0];
+      const home = comp.competitors.find(c => c.homeAway === 'home');
+      const away = comp.competitors.find(c => c.homeAway === 'away');
+      if (!home || !away) return;
+
+      const st = comp.status.type.name;
+      const isLive  = st === 'STATUS_IN_PROGRESS' || st === 'STATUS_HALFTIME';
+      const isFinal = st === 'STATUS_FINAL';
+      const hasScore = isLive || isFinal;
+
+      let clockDisplay = '';
+      if (st === 'STATUS_HALFTIME') clockDisplay = 'Halftime';
+      else if (isLive) {
+        const p = comp.status.period;
+        const half = p === 1 ? '1st Half' : p === 2 ? '2nd Half' : `OT${p-2>1?p-2:''}`;
+        clockDisplay = `${comp.status.displayClock} · ${half}`;
+      }
+
+      // Urgency score for sorting + live phase for card color
+      let urgency = 99999;
+      let livePhase = null;
+      if (isLive) {
+        const [mm, ss] = (comp.status.displayClock || '20:00').split(':').map(Number);
+        const secsLeft = (mm||0)*60 + (ss||0);
+        const p = comp.status.period;
+        if (st === 'STATUS_HALFTIME') { urgency = 1200; livePhase = 'halftime'; }
+        else if (p === 1) { urgency = secsLeft + 1200; livePhase = '1h'; }
+        else if (p === 2) { urgency = secsLeft; livePhase = secsLeft > 600 ? '2h-early' : '2h-late'; }
+        else { urgency = -1; livePhase = 'ot'; } // OT — most urgent
+      }
+
+      const homeConfId   = String(home.team.conferenceId || '');
+      const awayConfId   = String(away.team.conferenceId || '');
+      const homeConfName = CONF_NAMES[homeConfId] || 'Other';
+      const awayConfName = CONF_NAMES[awayConfId] || 'Other';
+
+      const obj = {
+        homeName: home.team.displayName,
+        awayName: away.team.displayName,
+        homeId: home.team.id || '',
+        awayId: away.team.id || '',
+        homeColor:'#'+(home.team.color||'30363d'),
+        awayColor:'#'+(away.team.color||'30363d'),
+        homeScore: hasScore ? +home.score : null,
+        awayScore: hasScore ? +away.score : null,
+        homeRecord: home.records?.[0]?.summary || '',
+        awayRecord: away.records?.[0]?.summary || '',
+        isLive, isFinal,
+        isScheduled: !isLive && !isFinal,
+        livePhase, clockDisplay, urgency,
+        network: comp.broadcasts?.[0]?.names?.[0] || comp.broadcast || '',
+        homeConfId, awayConfId, homeConfName, awayConfName,
+        confName: homeConfName, // kept for any legacy references
+      };
+
+      espnGames[makeKey(home.team.displayName, away.team.displayName)] = obj;
+      espnGames[makeKey(home.team.shortDisplayName||'', away.team.shortDisplayName||'')] = obj;
+      espnGames[makeKey(home.team.location||'', away.team.location||'')] = obj;
+    });
+
+    setESPNStatus('ok');
+  } catch(err) {
+    console.warn('ESPN fetch failed:', err);
+    setESPNStatus('error');
+  }
+  buildMerged();
+}
+
+setInterval(() => {
+  const hasActiveOrUpcoming = merged.some(g => g.espn?.isLive || g.espn?.isScheduled);
+  if (hasActiveOrUpcoming) fetchESPN();
+}, 45000);
+
+// ─────────────────────────────────────────────────────────────
+// NORMALIZE & MATCH
+// ─────────────────────────────────────────────────────────────
+const MASCOTS = new Set([
+  'jayhawks','wildcats','bulldogs','tigers','bears','eagles','hawks','huskies',
+  'wolves','wolverines','hoosiers','buckeyes','boilermakers','spartans','badgers',
+  'longhorns','razorbacks','gators','seminoles','cardinals','orange','commodores',
+  'volunteers','sooners','cowboys','cyclones','hawkeyes','cornhuskers','huskers',
+  'cougars','utes','aggies','lobos','aztecs','bruins','trojans','ducks','beavers',
+  'rebels','mavericks','rockets','zips','bobcats','lakers','jets','patriots',
+  'colonels','paladins','terriers','spiders','dukes','royals','governors','bearkats',
+  'flyers','falcons','rams','retrievers','greyhounds','redbirds','sycamores',
+  'pirates','mountaineers','demon deacons','fighting irish','horned frogs','mustangs',
+  'red raiders','rainbow warriors','thunderbirds','wolf pack','mean green',
+  'roadrunners','miners','sun devils','redhawks','penguins','golden flashes',
+  'norse','chargers','flames','seawolves','ospreys','hatters','knights','skyhawks',
+  'mocs','keydets','colonials','anteaters','tritons','matadors','highlanders',
+  'lumberjacks','panthers','toreros','dons','gaels','terps','terrapins',
+  'golden bears','warriors','bearkats','braves','seminoles','crimson tide',
+  'blue devils','tar heels','blue hens','gamecocks','razorbacks','longhorns',
+]);
+
+function norm(s) {
+  let t = (s||'').toLowerCase().replace(/[^a-z0-9 ]/g,'');
+  t = t.replace(/\b(university|college|at|of|the|and|state)\b/g,'');
+  t = t.split(' ').filter(w => w.length > 1 && !MASCOTS.has(w)).join(' ');
+  return t.replace(/\s+/g,' ').trim();
+}
+function makeKey(a,b) { return [norm(a),norm(b)].sort().join('||'); }
+
+function findESPN(h, a) {
+  const k = makeKey(h, a);
+  if (espnGames[k]) return espnGames[k];
+  const hn = norm(h), an = norm(a);
+  let best = null, bestScore = 0;
+  const seen = new Set();
+  for (const g of Object.values(espnGames)) {
+    if (seen.has(g.homeName+g.awayName)) continue;
+    seen.add(g.homeName+g.awayName);
+    const ghn = norm(g.homeName), gan = norm(g.awayName);
+    const score = overlap(hn,ghn)*2 + overlap(an,gan)*2 + overlap(hn,gan) + overlap(an,ghn);
+    if (score > bestScore && score >= 2) { bestScore = score; best = g; }
+  }
+  return best;
+}
+function overlap(a,b) {
+  if (!a||!b) return 0;
+  const wa = a.split(' '), wb = b.split(' ');
+  return wa.filter(w => w.length>2 && wb.includes(w)).length;
+}
+
+// ─────────────────────────────────────────────────────────────
+// BUILD MERGED
+// ─────────────────────────────────────────────────────────────
+function buildMerged() {
+  const source = selectedDate
+    ? emGames.filter(g => g.gameDate === selectedDate)
+    : emGames;
+  merged = source.map(em => {
+    const espn = findESPN(em.home, em.away);
+    const edge = Math.abs(em.vegasLine - em.emLine);
+    const isPlay = em.isBestBet;
+    const bestBetPlay = em.bestBetPlay || null;
+    const isTop25 = (em.homeRank != null && em.homeRank <= 25) ||
+                    (em.awayRank  != null && em.awayRank  <= 25);
+
+    // Pick direction
+    let pick = null;
+    if (isPlay) {
+      if (em.emLine < em.vegasLine) pick = `${em.home} ${em.vegasLine > 0 ? '+' : ''}${em.vegasLine.toFixed(1)}`;
+      else pick = `${em.away} ${em.vegasLine < 0 ? '+' : ''}${(-em.vegasLine).toFixed(1)}`;
+    }
+    return { ...em, espn, edge, isPlay, isTop25, pick, bestBetPlay };
+  });
+
+  buildConfSelect();
+  renderAll();
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONF DROPDOWN
+// ─────────────────────────────────────────────────────────────
+function buildConfSelect() {
+  const confs = new Map();
+  merged.forEach(g => {
+    const hc = g.espn?.homeConfName, ac = g.espn?.awayConfName;
+    if (hc && hc !== 'Other') confs.set(hc, (confs.get(hc)||0)+1);
+    if (ac && ac !== 'Other' && ac !== hc) confs.set(ac, (confs.get(ac)||0)+1);
+  });
+  const sel = document.getElementById('confSelect');
+  const prev = sel.value;
+  const sorted = [...confs.entries()].sort((a,b) => b[1]-a[1]);
+  sel.innerHTML = '<option value="all">All Conferences</option>' +
+    sorted.map(([name, cnt]) => `<option value="${name}">${name} (${cnt})</option>`).join('');
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+function setConf(val) {
+  activeConf = val;
+  renderAll();
+}
+
+// ─────────────────────────────────────────────────────────────
+// TABS & FILTERS
+// ─────────────────────────────────────────────────────────────
+function setTab(tab) {
+  activeTab = tab;
+  document.getElementById('tabLive').classList.toggle('active', tab==='live');
+  document.getElementById('tabFinal').classList.toggle('active', tab==='final');
+  document.getElementById('tabPlays').classList.toggle('active', tab==='plays');
+  document.getElementById('tabInfo').classList.toggle('active', tab==='info');
+  document.getElementById('liveSection').style.display   = tab==='live'  ? '' : 'none';
+  document.getElementById('finalSection').style.display  = tab==='final' ? '' : 'none';
+  document.getElementById('playsSection').style.display  = tab==='plays' ? '' : 'none';
+  document.getElementById('infoSection').style.display   = tab==='info'  ? '' : 'none';
+  // Hide filter bar on plays/info tabs — not applicable there
+  document.getElementById('filterBar').style.display = (tab==='plays'||tab==='info') ? 'none' : '';
+  renderAll();
+}
+
+function hasBet(g) {
+  const gKey  = `${g.home}||${g.away}`;
+  const gNorm = `${norm(g.home)}||${norm(g.away)}`;
+  return bets.some(b =>
+    b.gameKey === gKey ||
+    `${norm(b.home||'')}||${norm(b.away||'')}` === gNorm
+  );
+}
+
+function setChip(el) {
+  const val = el.dataset.filter;
+  if (activeSpecial === val) {
+    activeSpecial = null;
+    el.classList.remove('active');
+  } else {
+    activeSpecial = val;
+    document.querySelectorAll('.edge-chip,.top25-chip,.bets-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+  }
+  renderAll();
+}
+
+// ─────────────────────────────────────────────────────────────
+// RENDER ALL
+// ─────────────────────────────────────────────────────────────
+function renderAll() {
+  if (!merged.length) return;
+
+  // Apply filters
+  let games = merged.filter(g => {
+    if (activeSpecial === 'top25' && !g.isTop25)  return false;
+    if (activeSpecial === 'edge'  && !g.isPlay)   return false;
+    if (activeSpecial === 'bets'  && !hasBet(g))  return false;
+    if (activeConf !== 'all' && g.espn?.homeConfName !== activeConf && g.espn?.awayConfName !== activeConf) return false;
+    if (searchQuery && !g.home.toLowerCase().includes(searchQuery) && !g.away.toLowerCase().includes(searchQuery)) return false;
+    return true;
+  });
+
+  // Separate buckets
+  const live  = games.filter(g => g.espn?.isLive);
+  const sched = games.filter(g => !g.espn || g.espn.isScheduled);
+  const final_ = games.filter(g => g.espn?.isFinal);
+
+  // Sort live: bet games first, then by urgency
+  live.sort((a,b) => {
+    const ba = hasBet(a) ? 0 : 1, bb = hasBet(b) ? 0 : 1;
+    if (ba !== bb) return ba - bb;
+    return (a.espn?.urgency||99999) - (b.espn?.urgency||99999);
+  });
+  // Sort scheduled: bet games first, then by start time
+  sched.sort((a,b) => {
+    const ba = hasBet(a) ? 0 : 1, bb = hasBet(b) ? 0 : 1;
+    if (ba !== bb) return ba - bb;
+    return (parseTimeMin(a.time)??9999) - (parseTimeMin(b.time)??9999);
+  });
+  // Sort final by most recently finished (we don't have timestamps so leave as-is)
+
+  // Update tab counts
+  document.getElementById('countLive').textContent  = live.length + sched.length;
+  document.getElementById('countFinal').textContent = final_.length;
+  document.getElementById('countPlays').textContent = allEMPlays.length;
+
+  // KPIs
+  renderKPIs(games, live, final_);
+
+  // Section labels
+  document.getElementById('liveSectionLabel').style.display  = live.length  ? '' : 'none';
+  document.getElementById('schedSectionLabel').style.display = sched.length ? '' : 'none';
+
+  // Render grids
+  document.getElementById('liveGrid').innerHTML  = live.map(renderCard).join('');
+  document.getElementById('schedGrid').innerHTML = sched.map(renderCard).join('');
+  document.getElementById('finalGrid').innerHTML = final_.map(renderCard).join('');
+
+  // EM Plays tab
+  renderEMPlays();
+
+  // Empty states
+  if (!live.length && !sched.length && activeTab === 'live')
+    document.getElementById('liveGrid').innerHTML = '<div class="empty-state" style="grid-column:1/-1">No games match filters.</div>';
+  if (!final_.length && activeTab === 'final')
+    document.getElementById('finalGrid').innerHTML = '<div class="empty-state" style="grid-column:1/-1">No completed games yet.</div>';
+}
+
+// ─────────────────────────────────────────────────────────────
+// KPIs  — hourly day tracker timeline
+// ─────────────────────────────────────────────────────────────
+function renderKPIs(games, live, final_) {
+  const plays    = games.filter(g => g.isPlay);
+
+  // Use ALL games for the day for the timeline (ignore active filter)
+  const dayGames = selectedDate ? merged.filter(g => g.gameDate === selectedDate) : merged;
+
+  // Build hour → state map  (Bug 2 fix: uses parseHour with correct regex)
+  const hourMap = {}; // hour (int 0-23) → { total, upcoming, green, yellow, red, final }
+  dayGames.forEach(g => {
+    const h = parseHour(g.time);
+    if (h === null) return;
+    if (!hourMap[h]) hourMap[h] = { total:0, upcoming:0, green:0, yellow:0, red:0, final:0 };
+    hourMap[h].total++;
+    const phase = g.espn?.livePhase;
+    if (g.espn?.isFinal)                                   hourMap[h].final++;
+    else if (phase === '1h')                               hourMap[h].green++;
+    else if (phase === 'halftime' || phase === '2h-early') hourMap[h].yellow++;
+    else if (phase === '2h-late'  || phase === 'ot')       hourMap[h].red++;
+    else                                                   hourMap[h].upcoming++;
+  });
+
+  // Build timeline HTML
+  const hours = Object.keys(hourMap).map(Number).sort((a,b)=>a-b);
+  let timelineHTML = '';
+  if (hours.length > 0) {
+    let prev = null;
+    for (let i = 0; i < hours.length; i++) {
+      const h = hours[i];
+      // Insert a narrow gap for skipped hours (visual separator, not proportional)
+      if (prev !== null && h - prev > 1) {
+        timelineHTML += `<div class="dt-hour dt-gap" title="${h-prev-1} hr gap"></div>`;
+      }
+      const d = hourMap[h];
+      // Priority: red > yellow > green > grey (all final) > blue (upcoming)
+      const state = d.red > 0       ? 'red'
+                  : d.yellow > 0    ? 'yellow'
+                  : d.green > 0     ? 'green'
+                  : d.final === d.total ? 'grey'
+                  : 'blue';
+      const lbl = fmtHour(h);
+      // Width is proportional to game count — bigger slates = wider segment
+      timelineHTML += `<div class="dt-hour state-${state}" style="flex:${d.total}" title="${lbl}: ${d.total} game${d.total!==1?'s':''}">
+        <span class="dt-hour-label">${lbl}</span>
+        <span class="dt-hour-count">${d.total}</span>
+      </div>`;
+      prev = h;
+    }
+  } else {
+    timelineHTML = '<div class="dt-hour state-grey" style="flex:1;font-size:11px;"><span>No games</span></div>';
+  }
+
+  // Summary text — plain, no color-coded numbers (those colors are reserved for game cards)
+  const allFinal    = dayGames.filter(g => g.espn?.isFinal).length;
+  const allLive     = dayGames.filter(g => g.espn?.isLive).length;
+  const allUpcoming = dayGames.length - allFinal - allLive;
+  const summary = `${dayGames.length} games · ${allFinal} final · ${allLive} live · ${allUpcoming} upcoming`;
+
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi day-tracker">
+      <div class="kpi-label">Day Tracker</div>
+      <div class="dt-hours">${timelineHTML}</div>
+      <div class="dt-summary">${summary}</div>
+    </div>
+    <div class="kpi kpi-best"><div class="kpi-label">Best Bets</div><div class="kpi-value" style="color:var(--orange)">${plays.length > 0 ? plays[0].bestBetPlay || plays[0].pick || '—' : '—'}</div><div class="kpi-sub">${plays.length > 0 ? plays.length + ' play' + (plays.length !== 1 ? 's' : '') + ' today' : 'none today'}</div></div>
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────
+// EM PLAYS TAB
+// ─────────────────────────────────────────────────────────────
+function renderEMPlays() {
+  const el = document.getElementById('playsGrid');
+  if (!el) return;
+  if (!allEMPlays.length) {
+    el.innerHTML = '<div class="empty-state">No EM plays data — upload a file with a "Best Bet Data" sheet.</div>';
+    return;
+  }
+
+  // Sort: active plays first, then watching — each group sorted chronologically by game time
+  const sorted = [...allEMPlays].sort((a, b) => {
+    const aActive = a.play !== '' ? 0 : 1;
+    const bActive = b.play !== '' ? 0 : 1;
+    if (aActive !== bActive) return aActive - bActive;
+    return parseTimeMin(a.time) - parseTimeMin(b.time);
+  });
+
+  const activeCount  = sorted.filter(p => p.play !== '').length;
+  const pendingCount = sorted.length - activeCount;
+
+  const rows = sorted.map(p => {
+    const isActive = p.play !== '';
+    const homeRankStr = p.homeRank && p.homeRank <= 25 ? `<span class="play-rank">#${p.homeRank}</span>` : '';
+    const awayRankStr = p.awayRank && p.awayRank <= 25 ? `<span class="play-rank">#${p.awayRank}</span>` : '';
+    const emStr    = p.emLine    != null ? (p.emLine    > 0 ? '+' : '') + p.emLine.toFixed(1)    : '—';
+    const vegasStr = p.vegasLine != null ? (p.vegasLine > 0 ? '+' : '') + p.vegasLine.toFixed(1) : '—';
+    const edge     = (p.emLine != null && p.vegasLine != null) ? Math.abs(p.vegasLine - p.emLine) : null;
+    const edgeStr  = edge != null ? edge.toFixed(1) : '—';
+    const edgeCls  = edge == null ? 'lv-edge-low' : edge >= 6 ? 'lv-edge-high' : edge >= 4 ? 'lv-edge-med' : 'lv-edge-low';
+
+    return `<tr class="${isActive ? 'play-active' : ''}">
+      <td>
+        ${isActive
+          ? '<span class="play-status-active">⭐ Active</span>'
+          : '<span class="play-status-pending">⏳ Watching</span>'}
+      </td>
+      <td>
+        <div class="play-matchup">${awayRankStr}${p.away} <span style="color:var(--muted);font-weight:400">@</span> ${homeRankStr}${p.home}</div>
+        ${p.time ? `<div class="play-matchup-sub">${fmtTime(p.time)}</div>` : ''}
+      </td>
+      <td>
+        ${isActive ? `<div class="play-bet">${p.play}</div>` : '<span style="color:var(--muted);font-size:11px;">—</span>'}
+        ${p.threshPlay ? `<div class="play-thresh">${p.threshPlay}</div>` : ''}
+      </td>
+      <td><span class="play-line-val lv-em">${emStr}</span></td>
+      <td><span class="play-line-val lv-vegas">${vegasStr}</span></td>
+      <td><span class="play-line-val ${edgeCls}">${edgeStr}</span></td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+      <div class="kpi" style="min-width:0;padding:10px 16px;">
+        <div class="kpi-label">Active Plays</div>
+        <div class="kpi-value" style="color:var(--green)">${activeCount}</div>
+      </div>
+      <div class="kpi" style="min-width:0;padding:10px 16px;">
+        <div class="kpi-label">Watching</div>
+        <div class="kpi-value" style="color:var(--muted)">${pendingCount}</div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;overflow:hidden;">
+      <table class="plays-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Matchup</th>
+            <th>Play / Threshold</th>
+            <th>EM Line</th>
+            <th>Vegas</th>
+            <th>Edge</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// RENDER CARD
+// ─────────────────────────────────────────────────────────────
+function fmt(n) {
+  if (n==null) return '—';
+  return (n>0?'+':'')+n.toFixed(1);
+}
+
+function renderCard(g) {
+  const espn = g.espn;
+  // Align ESPN home/away to match EM's home/away convention
+  let _homeId    = espn?.homeId    || '';
+  let _awayId    = espn?.awayId    || '';
+  let _homeColor = '#' + ((espn?.homeColor || '').replace('#','') || '30363d');
+  let _awayColor = '#' + ((espn?.awayColor || '').replace('#','') || '30363d');
+  let _homeScore = espn?.homeScore ?? null;
+  let _awayScore = espn?.awayScore ?? null;
+  if (espn?.homeName) {
+    const espnHomeNorm = norm(espn.homeName);
+    const emHomeNorm   = norm(g.home);
+    const emAwayNorm   = norm(g.away);
+    const matchHome    = overlap(espnHomeNorm, emHomeNorm);
+    const matchAway    = overlap(espnHomeNorm, emAwayNorm);
+    if (matchAway > matchHome) {
+      [_homeId,    _awayId]    = [_awayId,    _homeId];
+      [_homeColor, _awayColor] = [_awayColor, _homeColor];
+      [_homeScore, _awayScore] = [_awayScore, _homeScore];
+    }
+  }
+  const isFinal = espn?.isFinal, isLive = espn?.isLive;
+  const hw = isFinal && _homeScore > _awayScore;
+  const aw = isFinal && _awayScore > _homeScore;
+  // Score display
+  const hasScore = espn && (isLive || isFinal);
+  const homeScoreCls = hasScore ? (hw?'score-winner': aw?'score-loser':'score-live') : 'score-tbd';
+  const awayScoreCls = hasScore ? (aw?'score-winner': hw?'score-loser':'score-live') : 'score-tbd';
+  const homeScoreTxt = hasScore ? _homeScore : '—';
+  const awayScoreTxt = hasScore ? _awayScore : '—';
+
+  // Status
+  let statusHTML;
+  if (espn?.isLive)       statusHTML = `<span class="game-status status-live">${espn.clockDisplay}</span>`;
+  else if (espn?.isFinal) statusHTML = `<span class="game-status status-final">Final</span>`;
+  else                    statusHTML = `<span class="game-status status-sched">${fmtGameDate(g)}${fmtTime(g.time)}</span>`;
+
+  // Ranks
+  const homeRank = g.homeRank && g.homeRank<=25 ? `<span class="rank-tag">#${g.homeRank}</span>` : '';
+  const awayRank = g.awayRank && g.awayRank<=25 ? `<span class="rank-tag">#${g.awayRank}</span>` : '';
+
+  // Logos (ESPN CDN)
+  const homeLogo = _homeId ? `<img class="team-logo" src="https://a.espncdn.com/i/teamlogos/ncaa/500/${_homeId}.png" onerror="this.style.display='none'" alt="">` : '';
+  const awayLogo = _awayId ? `<img class="team-logo" src="https://a.espncdn.com/i/teamlogos/ncaa/500/${_awayId}.png" onerror="this.style.display='none'" alt="">` : '';
+
+  // Team colors for row borders
+  const homeColor = _homeColor;
+  const awayColor = _awayColor;
+
+  // Badges — show both conferences if cross-conference matchup
+  const confBadge = (() => {
+    const confs = [espn?.awayConfName, espn?.homeConfName]
+      .filter((n,i,a) => n && n!=='Other' && a.indexOf(n)===i);
+    return confs.map(n => `<span class="badge badge-conf">${n}</span>`).join('');
+  })();
+  const edgeBadge = g.isPlay
+    ? `<span class="badge badge-big-edge">⭐ Best Bet</span>` : '';
+  const t25Badge = g.isTop25 ? `<span class="badge badge-t25">T25</span>` : '';
+
+  const emStr    = fmt(g.emLine);
+  const vegasStr = fmt(g.vegasLine);
+  const edgeCls  = g.edge>=6?'lv-edge-high':g.edge>=4?'lv-edge-med':'lv-edge-low';
+  const network  = espn?.network || '';
+
+  // O/U totals
+  const emOUStr    = g.emOU    != null ? g.emOU.toFixed(1)    : '—';
+  const vegasOUStr = g.vegasOU != null ? g.vegasOU.toFixed(1) : '—';
+  const ouEdge     = (g.emOU != null && g.vegasOU != null) ? Math.abs(g.vegasOU - g.emOU) : null;
+  const ouEdgeCls  = ouEdge == null ? 'lv-edge-low' : ouEdge >= 6 ? 'lv-edge-high' : ouEdge >= 4 ? 'lv-edge-med' : 'lv-edge-low';
+  const ouEdgeStr  = ouEdge != null ? ouEdge.toFixed(1) : '—';
+  const hasTotals  = g.emOU != null || g.vegasOU != null;
+
+  // Bets for this game — exact key first, normalized fallback for cross-upload matching
+  const _gKey  = `${g.home}||${g.away}`;
+  const _gNorm = `${norm(g.home)}||${norm(g.away)}`;
+  const gameBets = bets.filter(b =>
+    b.gameKey === _gKey ||
+    `${norm(b.home||'')}||${norm(b.away||'')}` === _gNorm
+  );
+
+  const edgeCls2 = g.edge>=6?' big-edge':g.isPlay?' has-edge':'';
+  const phaseCls = espn?.livePhase ? ` live-${espn.livePhase}` : '';
+  const betCls   = gameBets.length ? ' has-bet' : '';
+  const cardCls  = 'score-card' + edgeCls2 + phaseCls + betCls;
+
+  // Bet history badges for each team
+  const homeHist = getTeamHistHTML(g.home);
+  const awayHist = getTeamHistHTML(g.away);
+
+  const betHTML = gameBets.map(bet => {
+    const st = getBetStatus(bet, g);
+    const stCls = (st.state==='win'||st.state==='winning') ? 'bet-win'
+                : (st.state==='loss'||st.state==='losing')  ? 'bet-loss' : 'bet-pending';
+    const stLabel = {win:'✓ Won',loss:'✗ Lost',winning:'● Winning',losing:'● Losing',pending:'Pending'}[st.state]||'';
+    return `<div class="bet-row">
+      <span class="bet-desc">${fmtBetDesc(bet)}</span>
+      <span style="display:flex;align-items:center;gap:4px;">
+        <span class="bet-status ${stCls}">${stLabel}${st.pnlStr?' '+st.pnlStr:''}</span>
+        <button class="bet-remove" onclick="removeBet('${bet.id}',event)" title="Remove">✕</button>
+      </span>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="${cardCls}">
+    <div class="card-header">
+      <div class="card-badges">${confBadge}${edgeBadge}${t25Badge}</div>
+      ${statusHTML}
+    </div>
+    <div class="team-row" style="border-left-color:${awayColor}">
+      <div class="team-left">${awayLogo}${awayRank}<span class="team-name">${g.away}</span>${awayHist}</div>
+      <span class="team-score ${awayScoreCls}">${awayScoreTxt}</span>
+    </div>
+    <div class="team-sep"><span class="at-sym">@</span></div>
+    <div class="team-row" style="border-left-color:${homeColor}">
+      <div class="team-left">${homeLogo}${homeRank}<span class="team-name">${g.home}</span>${homeHist}</div>
+      <span class="team-score ${homeScoreCls}">${homeScoreTxt}</span>
+    </div>
+    <div class="card-footer">
+      <div class="lines-row">
+        <div class="line-item"><div class="line-lbl">EM</div><div class="line-val lv-em">${emStr}</div></div>
+        <div class="line-vsep"></div>
+        <div class="line-item"><div class="line-lbl">Vegas</div><div class="line-val lv-vegas">${vegasStr}</div></div>
+        <div class="line-vsep"></div>
+        <div class="line-item"><div class="line-lbl">Edge</div><div class="line-val ${edgeCls}">${g.edge.toFixed(1)}</div></div>
+        <div class="line-network">${fmtNetwork(network)}</div>
+      </div>
+      ${hasTotals ? `<div class="lines-row" style="margin-top:4px;">
+        <div class="line-item"><div class="line-lbl">EM Total</div><div class="line-val lv-em">${emOUStr}</div></div>
+        <div class="line-vsep"></div>
+        <div class="line-item"><div class="line-lbl">Vegas Total</div><div class="line-val lv-vegas">${vegasOUStr}</div></div>
+        <div class="line-vsep"></div>
+        <div class="line-item"><div class="line-lbl">O/U Edge</div><div class="line-val ${ouEdgeCls}">${ouEdgeStr}</div></div>
+        <div class="line-network"></div>
+      </div>` : ''}
+      ${g.bestBetPlay ? `<div class="pick-row"><span class="pick-label">⭐ Best Bet</span><span class="pick-val">${g.bestBetPlay}</span></div>` : g.pick ? `<div class="pick-row"><span class="pick-label">▶ Pick</span><span class="pick-val">${g.pick}</span></div>` : ''}
+      ${betHTML}
+      <button class="add-bet-btn" onclick="openBetModal('${escAttr(g.home)}','${escAttr(g.away)}')">+ Add Bet</button>
+    </div>
+  </div>`;
+}
+
+// Bug 3 fix: proper time formatting for '06:00:00 PM EST' style strings
+function fmtTime(t) {
+  if (!t) return '—';
+  const m = t.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
+  if (m) return `${parseInt(m[1])}:${m[2]} ${m[3].toUpperCase()}`;
+  return t.replace(':00:00','').replace(/\s*E[SD]T/i,'').trim() || '—';
+}
+
+// Parse hour (0-23) from time string like '06:00:00 PM EST'
+function parseHour(t) {
+  if (!t) return null;
+  const m = t.match(/(\d{1,2}):\d{2}(?::\d{2})?\s*(AM|PM)/i);
+  if (!m) return null;
+  let h = parseInt(m[1]);
+  const pm = m[2].toUpperCase() === 'PM';
+  if (pm && h !== 12) h += 12;
+  if (!pm && h === 12) return null;
+  return h;
+}
+
+function fmtHour(h) {
+  if (h === 0)  return '12am';
+  if (h === 12) return '12pm';
+  if (h > 12)   return `${h-12}pm`;
+  return `${h}am`;
+}
+
+// Parse time string to total minutes past midnight (for chronological sorting)
+function parseTimeMin(t) {
+  if (!t) return 9999;
+  const m = t.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
+  if (!m) return 9999;
+  let h = parseInt(m[1]);
+  const min = parseInt(m[2]);
+  const pm = m[3].toUpperCase() === 'PM';
+  if (pm && h !== 12) h += 12;
+  if (!pm && h === 12) return 9999;
+  return h * 60 + min;
+}
+
+// Network brand badge — colored pill with network name
+const NET_COLORS = {
+  // ESPN family — red
+  'ESPN':        { bg:'#c41230', text:'#fff' },
+  'ESPN2':       { bg:'#c41230', text:'#fff' },
+  'ESPNU':       { bg:'#c41230', text:'#fff' },
+  'ESPN+':       { bg:'#c41230', text:'#fff' },
+  'ESPNEWS':     { bg:'#c41230', text:'#fff' },
+  'ESPNews':     { bg:'#c41230', text:'#fff' },
+  // ABC — black
+  'ABC':         { bg:'#1a1a1a', text:'#fff' },
+  // CBS family — blue
+  'CBS':         { bg:'#1a3c7a', text:'#fff' },
+  'CBSSN':       { bg:'#1a3c7a', text:'#fff' },
+  'CBS Sports Network': { bg:'#1a3c7a', text:'#fff' },
+  'Paramount+':  { bg:'#0064ff', text:'#fff' },
+  // FOX family — slate blue
+  'FOX':         { bg:'#003087', text:'#fff' },
+  'FS1':         { bg:'#003087', text:'#fff' },
+  'FS2':         { bg:'#003087', text:'#fff' },
+  'Fox Sports 1':{ bg:'#003087', text:'#fff' },
+  // TNT / TBS / truTV — Warner
+  'TNT':         { bg:'#b91c1c', text:'#fff' },
+  'TBS':         { bg:'#6b21a8', text:'#fff' },
+  'truTV':       { bg:'#15803d', text:'#fff' },
+  // NBC family
+  'NBC':         { bg:'#f59e0b', text:'#000' },
+  'USA':         { bg:'#1d4ed8', text:'#fff' },
+  'USA Network': { bg:'#1d4ed8', text:'#fff' },
+  'Peacock':     { bg:'#0f172a', text:'#a3e635' },
+  // Conference networks
+  'BTN':             { bg:'#0033a0', text:'#fff' },
+  'Big Ten Network': { bg:'#0033a0', text:'#fff' },
+  'Big Ten Network+':{ bg:'#0033a0', text:'#fff' },
+  'SEC Network':     { bg:'#00205b', text:'#fff' },
+  'SEC Network+':    { bg:'#00205b', text:'#fff' },
+  'SECN':            { bg:'#00205b', text:'#fff' },
+  'SECN+':           { bg:'#00205b', text:'#fff' },
+  'ACC Network':     { bg:'#013ca6', text:'#fff' },
+  'ACCN':            { bg:'#013ca6', text:'#fff' },
+  'ACCNX':           { bg:'#013ca6', text:'#fff' },
+  'ACC Network Extra':{ bg:'#013ca6', text:'#fff' },
+  // Streaming / other
+  'FloSports':   { bg:'#0d9488', text:'#fff' },
+  'Stadium':     { bg:'#374151', text:'#fff' },
+  'NBA TV':      { bg:'#c8102e', text:'#fff' },
+};
+
+function fmtNetwork(name) {
+  if (!name) return '';
+  // Normalize common variations
+  const brand = NET_COLORS[name];
+  if (brand) {
+    return `<span class="net-badge" style="background:${brand.bg};color:${brand.text}">${name}</span>`;
+  }
+  // Fallback: generic dark badge for unknown networks
+  return `<span class="net-badge" style="background:#374151;color:#d1d5db">${name}</span>`;
+}
+
+// Format scheduled game date: "Tue Mar 4 · "
+function fmtGameDate(g) {
+  if (!g.gameDate) return '';
+  // gameDate is YYYYMMDD — parse carefully to avoid timezone shift
+  const yr = g.gameDate.slice(0,4), mo = g.gameDate.slice(4,6), dy = g.gameDate.slice(6,8);
+  const d = new Date(`${yr}-${mo}-${dy}T12:00:00`); // noon to avoid DST edge
+  return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · ';
+}
+
+// ─────────────────────────────────────────────────────────────
+// BETS — localStorage
+// ─────────────────────────────────────────────────────────────
+let bets = [];
+try { bets = JSON.parse(localStorage.getItem('cbb_bets') || '[]'); } catch(e) {}
+function saveBets() { try { localStorage.setItem('cbb_bets', JSON.stringify(bets)); } catch(e) {} }
+
+// ─────────────────────────────────────────────────────────────
+// BET MODAL STATE
+// ─────────────────────────────────────────────────────────────
+let modalGameRef = null;
+let modalBetType = 'spread';
+let modalSideIdx = 0;
+
+function escAttr(s) { return (s||'').replace(/"/g,'&quot;'); }
+
+// Open from card button (game known) or header button (game=null → show search)
+function openBetModal(home, away) {
+  modalBetType = 'spread';
+  modalSideIdx = 0;
+  document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.type==='spread'));
+
+  if (home && away) {
+    modalGameRef = merged.find(g => g.home === home && g.away === away) || null;
+    document.getElementById('gameSearchWrap').style.display = 'none';
+    showSelectedGame();
+  } else {
+    modalGameRef = null;
+    document.getElementById('gameSearchWrap').style.display = '';
+    document.getElementById('gameSearchInput').value = '';
+    document.getElementById('gameSearchResults').style.display = 'none';
+    document.getElementById('selectedGameBox').style.display = 'none';
+  }
+
+  updateModalSides();
+  prefillLine();
+  document.getElementById('betOdds').value = -110;
+  document.getElementById('betStake').value = 1;
+  document.getElementById('modalOverlay').style.display = 'flex';
+  if (!home) setTimeout(() => document.getElementById('gameSearchInput').focus(), 80);
+}
+
+function showSelectedGame() {
+  const g = modalGameRef;
+  const box = document.getElementById('selectedGameBox');
+  if (!g) { box.style.display = 'none'; return; }
+  document.getElementById('selectedGameTeams').textContent = `${g.away} @ ${g.home}`;
+  const status = g.espn?.isLive ? g.espn.clockDisplay : g.espn?.isFinal ? 'Final' : fmtTime(g.time);
+  document.getElementById('selectedGameMeta').textContent = `Vegas ${fmt(g.vegasLine)} · EM ${fmt(g.emLine)}` + (status ? ` · ${status}` : '');
+  box.style.display = '';
+}
+
+function filterGameSearch() {
+  const q = document.getElementById('gameSearchInput').value.toLowerCase().trim();
+  const res = document.getElementById('gameSearchResults');
+  if (!q || q.length < 2) { res.style.display = 'none'; return; }
+  const matches = merged.filter(g =>
+    g.home.toLowerCase().includes(q) || g.away.toLowerCase().includes(q)
+  ).slice(0, 12);
+  if (!matches.length) { res.style.display = 'none'; return; }
+  res.innerHTML = matches.map(g => {
+    const status = g.espn?.isLive ? `🔴 ${g.espn.clockDisplay}` : g.espn?.isFinal ? 'Final' : fmtTime(g.time);
+    return `<div class="search-result" onclick="selectSearchGame('${escAttr(g.home)}','${escAttr(g.away)}')">
+      <div class="sr-teams">${g.away} @ ${g.home}</div>
+      <div class="sr-meta">${status} · Vegas ${fmt(g.vegasLine)}</div>
+    </div>`;
+  }).join('');
+  res.style.display = '';
+}
+
+function selectSearchGame(home, away) {
+  modalGameRef = merged.find(g => g.home === home && g.away === away) || null;
+  document.getElementById('gameSearchInput').value = `${away} @ ${home}`;
+  document.getElementById('gameSearchResults').style.display = 'none';
+  showSelectedGame();
+  updateModalSides();
+  prefillLine();
+}
+
+function closeModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+function closeModalOutside(e) { if (e.target.id === 'modalOverlay') closeModal(); }
+
+function setBetType(type) {
+  modalBetType = type;
+  document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.type===type));
+  document.getElementById('lineFieldWrap').style.opacity = (type === 'ml' || type === '1to10') ? '.4' : '1';
+  updateModalSides();
+  prefillLine();
+}
+
+function updateModalSides() {
+  const g = modalGameRef;
+  const [l0, l1] = modalBetType === 'total'
+    ? ['Over', 'Under']
+    : [g?.home || 'Home', g?.away || 'Away'];
+  document.getElementById('sideBtn0').textContent = l0;
+  document.getElementById('sideBtn1').textContent = l1;
+  setModalSide(0);
+}
+
+function setModalSide(idx) {
+  modalSideIdx = idx;
+  document.getElementById('sideBtn0').classList.toggle('active', idx===0);
+  document.getElementById('sideBtn1').classList.toggle('active', idx===1);
+}
+
+function prefillLine() {
+  const g = modalGameRef;
+  if (modalBetType === 'spread') document.getElementById('betLine').value = g?.vegasLine ?? '';
+  else if (modalBetType === 'total') document.getElementById('betLine').value = g?.vegasOU ?? '';
+  else if (modalBetType === '1h') document.getElementById('betLine').value = '';
+  else if (modalBetType === '1to10') document.getElementById('betLine').value = '';
+  else document.getElementById('betLine').value = '';
+}
+
+function submitBet() {
+  const g = modalGameRef;
+  if (!g) { alert('Please select a game first.'); return; }
+  const stake = parseFloat(document.getElementById('betStake').value);
+  const odds  = parseFloat(document.getElementById('betOdds').value);
+  const line  = parseFloat(document.getElementById('betLine').value);
+  if (!stake || !odds) return;
+
+  const sides = (modalBetType === 'total')
+    ? ['over','under']
+    : (modalBetType === '1to10')
+    ? ['home 1st','away 1st']
+    : ['home','away'];
+  bets.push({
+    id: Date.now().toString(),
+    gameKey: `${g.home}||${g.away}`,
+    home: g.home, away: g.away,
+    betType: modalBetType,
+    side: sides[modalSideIdx],
+    line: isNaN(line) ? null : line,
+    odds, stake,
+    placedAt: Date.now(),
+  });
+  saveBets();
+  closeModal();
+  renderAll();
+}
+
+function removeBet(id, e) {
+  e.stopPropagation();
+  bets = bets.filter(b => b.id !== id);
+  saveBets();
+  renderAll();
+}
+
+// ─────────────────────────────────────────────────────────────
+// BET STATUS & DISPLAY
+// ─────────────────────────────────────────────────────────────
+function getBetStatus(bet, game) {
+  const espn = game.espn;
+  if (!espn || espn.isScheduled) return { state:'pending', pnlStr:'' };
+  const hs = espn.homeScore||0, as = espn.awayScore||0;
+  let covering = null;
+  if (bet.betType === 'spread' && bet.line != null) {
+    // vegasLine from home perspective: -7.5 means home favored 7.5
+    // home covers if (hs - as) > -bet.line
+    covering = bet.side === 'home' ? (hs - as) > -bet.line : (hs - as) < -bet.line;
+  } else if (bet.betType === 'ml') {
+    covering = bet.side === 'home' ? hs > as : as > hs;
+  } else if (bet.betType === 'total' && bet.line != null) {
+    covering = bet.side === 'over' ? (hs + as) > bet.line : (hs + as) < bet.line;
+  }
+  if (covering === null) return { state:'pending', pnlStr:'' };
+  // Units-based P&L: win = stake * (odds/100 if positive, else 100/|odds|); loss = -stake
+  const winUnits = bet.odds > 0 ? bet.stake*(bet.odds/100) : bet.stake*(100/Math.abs(bet.odds));
+  const isFinal = espn.isFinal;
+  const state = covering ? (isFinal?'win':'winning') : (isFinal?'loss':'losing');
+  const pnl = covering ? winUnits : -bet.stake;
+  return { state, pnlStr: `${pnl>=0?'+':''}${Math.abs(pnl).toFixed(1)}u` };
+}
+
+function fmtBetDesc(bet) {
+  if (bet.betType === '1h') {
+    const teamName = bet.side === 'home' ? bet.home : bet.away;
+    const lineStr = bet.line != null ? ` ${bet.line > 0 ? '+' : ''}${bet.line}` : '';
+    return `1H: ${teamName}${lineStr} · ${bet.stake}u`;
+  }
+  if (bet.betType === '1to10') {
+    const teamName = bet.side === 'home 1st' ? bet.home : bet.away;
+    return `1st to 10: ${teamName} · ${bet.stake}u`;
+  }
+  const side = bet.betType === 'total'
+    ? (bet.side==='over'?'Over':'Under')
+    : (bet.side==='home'?bet.home:bet.away);
+  const lineStr = (bet.betType==='ml'||bet.line==null) ? '' : ` ${bet.line>0?'+':''}${bet.line}`;
+  return `${side}${lineStr} · ${bet.stake}u`;
+}
+
+// ── BAKED EM DATA (auto-loaded, no xlsx upload required) ──
+const BAKED_EM_GAMES = [{"home": "UAB", "away": "Charlotte", "time": "01:00:00 PM EDT", "emLine": -4.2, "vegasLine": -5.5, "emOU": 143.033423935748, "vegasOU": 147.5, "venue": "Semi-Home", "homeRank": 115, "awayRank": 177, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Florida", "away": "Kentucky", "time": "01:00:00 PM EDT", "emLine": -13.3, "vegasLine": -11.5, "emOU": 155.037791037917, "vegasOU": 161.0, "venue": "Neutral", "homeRank": 4, "awayRank": 25, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Alabama A&M", "away": "Prairie View", "time": "02:00:00 PM EDT", "emLine": -0.5, "vegasLine": -1.0, "emOU": 147.788212394545, "vegasOU": 140.0, "venue": "Neutral", "homeRank": 295, "awayRank": 307, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Dayton", "away": "Saint Bonaventure", "time": "02:00:00 PM EDT", "emLine": -6.1, "vegasLine": -5.5, "emOU": 142.457602952411, "vegasOU": 142.5, "venue": "Neutral", "homeRank": 71, "awayRank": 130, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Illinois", "away": "Wisconsin", "time": "02:30:00 PM EDT", "emLine": -5.4, "vegasLine": -8.0, "emOU": 153.655744051649, "vegasOU": 157.5, "venue": "Neutral", "homeRank": 7, "awayRank": 20, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Sam Houston State", "away": "Kennesaw State", "time": "03:00:00 PM EDT", "emLine": -3.8, "vegasLine": -3.0, "emOU": 160.361801116604, "vegasOU": 160.0, "venue": "Neutral", "homeRank": 107, "awayRank": 174, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Vanderbilt", "away": "Tennessee", "time": "03:30:00 PM EDT", "emLine": -1.4, "vegasLine": 0.5, "emOU": 147.035782614325, "vegasOU": 146.5, "venue": "Semi-Home", "homeRank": 16, "awayRank": 13, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Tulsa", "away": "North Texas", "time": "03:30:00 PM EDT", "emLine": -7.1, "vegasLine": -8.5, "emOU": 138.230909360538, "vegasOU": 142.0, "venue": "Neutral", "homeRank": 57, "awayRank": 131, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Toledo", "away": "Massachusetts", "time": "05:00:00 PM EDT", "emLine": -2.1, "vegasLine": -2.5, "emOU": 158.401022873629, "vegasOU": 157.0, "venue": "Neutral", "homeRank": 143, "awayRank": 181, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Duquesne", "away": "VCU", "time": "05:00:00 PM EDT", "emLine": 4.4, "vegasLine": 8.5, "emOU": 152.977459252725, "vegasOU": 153.0, "venue": "Home", "homeRank": 124, "awayRank": 46, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "St. John's", "away": "Seton Hall", "time": "05:30:00 PM EDT", "emLine": -7.9, "vegasLine": -8.0, "emOU": 133.989848444113, "vegasOU": 133.0, "venue": "Neutral", "homeRank": 11, "awayRank": 52, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Howard", "away": "South Carolina State", "time": "06:00:00 PM EDT", "emLine": -16.0, "vegasLine": -15.5, "emOU": 147.752378433235, "vegasOU": 146.5, "venue": "Neutral", "homeRank": 183, "awayRank": 347, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Nebraska", "away": "Purdue", "time": "06:30:00 PM EDT", "emLine": 3.0, "vegasLine": 4.5, "emOU": 144.095422343142, "vegasOU": 145.5, "venue": "Neutral", "homeRank": 14, "awayRank": 9, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Alabama", "away": "Ole Miss", "time": "07:00:00 PM EDT", "emLine": -11.3, "vegasLine": -12.0, "emOU": 162.621674390279, "vegasOU": 165.0, "venue": "Neutral", "homeRank": 18, "awayRank": 68, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Virginia", "away": "Miami (Fla.)", "time": "07:00:00 PM EDT", "emLine": -2.1, "vegasLine": -3.5, "emOU": 146.087354844093, "vegasOU": 145.5, "venue": "Neutral", "homeRank": 19, "awayRank": 24, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Arizona", "away": "Iowa State", "time": "07:00:00 PM EDT", "emLine": -6.1, "vegasLine": -3.0, "emOU": 148.335770707173, "vegasOU": 144.5, "venue": "Neutral", "homeRank": 2, "awayRank": 8, "gameDate": "20260313", "isBestBet": true, "bestBetPlay": "Arizona -3"}, {"home": "Saint Joseph's", "away": "Davidson", "time": "07:30:00 PM EDT", "emLine": -0.4, "vegasLine": -2.0, "emOU": 133.924612577221, "vegasOU": 132.5, "venue": "Neutral", "homeRank": 109, "awayRank": 110, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Akron", "away": "Kent State", "time": "07:30:00 PM EDT", "emLine": -9.0, "vegasLine": -6.5, "emOU": 164.086537608066, "vegasOU": 162.5, "venue": "Neutral", "homeRank": 59, "awayRank": 148, "gameDate": "20260313", "isBestBet": true, "bestBetPlay": "Akron -6.5"}, {"home": "North Carolina Central", "away": "Delaware State", "time": "08:00:00 PM EDT", "emLine": -4.9, "vegasLine": -3.5, "emOU": 134.978389133827, "vegasOU": 131.5, "venue": "Neutral", "homeRank": 342, "awayRank": 361, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Connecticut", "away": "Georgetown", "time": "08:00:00 PM EDT", "emLine": -13.7, "vegasLine": -15.0, "emOU": 140.829978116344, "vegasOU": 138.5, "venue": "Neutral", "homeRank": 6, "awayRank": 91, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Florida A&M", "away": "Southern", "time": "08:30:00 PM EDT", "emLine": 3.2, "vegasLine": 1.5, "emOU": 148.593802426306, "vegasOU": 142.0, "venue": "Neutral", "homeRank": 309, "awayRank": 262, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "UC Irvine", "away": "Cal State Northridge", "time": "09:00:00 PM EDT", "emLine": -5.2, "vegasLine": -4.0, "emOU": 152.402716728044, "vegasOU": 151.5, "venue": "Neutral", "homeRank": 103, "awayRank": 194, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Michigan State", "away": "UCLA", "time": "09:00:00 PM EDT", "emLine": -4.8, "vegasLine": -5.0, "emOU": 140.216741225002, "vegasOU": 142.0, "venue": "Neutral", "homeRank": 10, "awayRank": 26, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Utah Valley", "away": "UT Arlington", "time": "09:00:00 PM EDT", "emLine": -7.4, "vegasLine": -9.0, "emOU": 136.16789077264, "vegasOU": 136.0, "venue": "Neutral", "homeRank": 80, "awayRank": 196, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Houston", "away": "Kansas", "time": "09:30:00 PM EDT", "emLine": -5.2, "vegasLine": -5.0, "emOU": 134.564678416846, "vegasOU": 138.5, "venue": "Neutral", "homeRank": 5, "awayRank": 15, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Duke", "away": "Clemson", "time": "09:30:00 PM EDT", "emLine": -13.3, "vegasLine": -10.5, "emOU": 132.415092570105, "vegasOU": 135.5, "venue": "Neutral", "homeRank": 3, "awayRank": 32, "gameDate": "20260313", "isBestBet": true, "bestBetPlay": "Duke -10.5"}, {"home": "Utah State", "away": "Nevada", "time": "09:30:00 PM EDT", "emLine": -5.7, "vegasLine": -6.5, "emOU": 147.203778791193, "vegasOU": 145.0, "venue": "Neutral", "homeRank": 34, "awayRank": 79, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Arkansas", "away": "Oklahoma", "time": "09:30:00 PM EDT", "emLine": -4.5, "vegasLine": -6.5, "emOU": 164.460284488094, "vegasOU": 166.5, "venue": "Neutral", "homeRank": 17, "awayRank": 33, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Saint Louis", "away": "George Washington", "time": "11:30:00 AM EDT", "emLine": -5.7, "vegasLine": 6.0, "emOU": 160.260691416191, "vegasOU": 165.0, "venue": "Neutral", "homeRank": 30, "awayRank": 69, "gameDate": "20260313", "isBestBet": true, "bestBetPlay": "Saint Louis +6"}, {"home": "Hawaii", "away": "Cal State Fullerton", "time": "11:30:00 PM EDT", "emLine": -5.2, "vegasLine": -5.0, "emOU": 158.019032907445, "vegasOU": 157.0, "venue": "Neutral", "homeRank": 136, "awayRank": 209, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "California Baptist", "away": "Utah Tech", "time": "11:30:00 PM EDT", "emLine": -5.5, "vegasLine": -7.0, "emOU": 139.116296306243, "vegasOU": 143.5, "venue": "Neutral", "homeRank": 122, "awayRank": 231, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "San Diego State", "away": "New Mexico", "time": "12:00:00 AM EDT", "emLine": -1.1, "vegasLine": -2.5, "emOU": 149.142659059838, "vegasOU": 150.5, "venue": "Neutral", "homeRank": 50, "awayRank": 53, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Michigan", "away": "Ohio State", "time": "12:00:00 PM EDT", "emLine": -15.0, "vegasLine": -15.0, "emOU": 155.772054241934, "vegasOU": 155.5, "venue": "Neutral", "homeRank": 1, "awayRank": 23, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Louisiana Tech", "away": "Missouri State", "time": "12:30:00 PM EDT", "emLine": -1.1, "vegasLine": 0.5, "emOU": 129.873601418192, "vegasOU": 134.5, "venue": "Neutral", "homeRank": 180, "awayRank": 201, "gameDate": "20260313", "isBestBet": false, "bestBetPlay": null}, {"home": "Vanderbilt", "away": "Florida", "time": "01:00:00 PM EDT", "emLine": 4.1, "vegasLine": 7.0, "emOU": 162.45536089764, "vegasOU": 160.5, "venue": "Home", "homeRank": 16, "awayRank": 4, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "Michigan", "away": "Wisconsin", "time": "01:00:00 PM EDT", "emLine": -11.8, "vegasLine": -12.5, "emOU": 162.304899005729, "vegasOU": 161.5, "venue": "Neutral", "homeRank": 1, "awayRank": 20, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "Saint Louis", "away": "Dayton", "time": "01:00:00 PM EDT", "emLine": -5.7, "vegasLine": -6.0, "emOU": 151.581919736179, "vegasOU": 148.5, "venue": "Neutral", "homeRank": 31, "awayRank": 68, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "Harvard", "away": "Penn", "time": "02:00:00 PM EDT", "emLine": -1.9, "vegasLine": -2.5, "emOU": 136.578717281892, "vegasOU": 136.0, "venue": "Neutral", "homeRank": 128, "awayRank": 163, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "South Florida", "away": "Charlotte", "time": "03:00:00 PM EDT", "emLine": -12.5, "vegasLine": -14.0, "emOU": 150.994445423993, "vegasOU": 153.5, "venue": "Neutral", "homeRank": 45, "awayRank": 174, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "Wichita State", "away": "Tulsa", "time": "05:00:00 PM EDT", "emLine": 2.4, "vegasLine": 0.5, "emOU": 149.711095414064, "vegasOU": 149.5, "venue": "Neutral", "homeRank": 84, "awayRank": 57, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "Louisiana Tech", "away": "Kennesaw State", "time": "08:30:00 PM EDT", "emLine": -0.2, "vegasLine": 1.5, "emOU": 143.370018863213, "vegasOU": 141.0, "venue": "Neutral", "homeRank": 180, "awayRank": 178, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "Cornell", "away": "Yale", "time": "11:00:00 AM EDT", "emLine": 5.5, "vegasLine": 3.5, "emOU": 165.274751173494, "vegasOU": 164.0, "venue": "Home", "homeRank": 149, "awayRank": 58, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}, {"home": "UMBC", "away": "Vermont", "time": "11:00:00 AM EDT", "emLine": -4.2, "vegasLine": -2.5, "emOU": 139.382130110491, "vegasOU": 137.5, "venue": "Home", "homeRank": 175, "awayRank": 207, "gameDate": "20260314", "isBestBet": false, "bestBetPlay": null}];
+const BAKED_BEST_BETS = {"saint louis|||george washington": "Saint Louis +6", "arizona|||iowa state": "Arizona -3", "duke|||clemson": "Duke -10.5", "akron|||kent state": "Akron -6.5"};
+const BAKED_ALL_EM_PLAYS = [{"home": "Saint Louis", "away": "George Washington", "play": "Saint Louis +6", "threshPlay": "Take Saint Louis at +0.5 or better", "emLine": -5.7, "vegasLine": 6.0, "homeRank": 30, "awayRank": 69, "date": "", "time": "11:30:00 AM EDT", "venue": "Neutral"}, {"home": "Arizona", "away": "Iowa State", "play": "Arizona -3", "threshPlay": "Take Arizona at -4 or better", "emLine": -6.1, "vegasLine": -3.0, "homeRank": 2, "awayRank": 8, "date": "", "time": "07:00:00 PM EDT", "venue": "Neutral"}, {"home": "Duke", "away": "Clemson", "play": "Duke -10.5", "threshPlay": "Take Duke at -11 or better", "emLine": -13.3, "vegasLine": -10.5, "homeRank": 3, "awayRank": 32, "date": "", "time": "09:30:00 PM EDT", "venue": "Neutral"}, {"home": "Akron", "away": "Kent State", "play": "Akron -6.5", "threshPlay": "Take Akron at -7 or better", "emLine": -9.0, "vegasLine": -6.5, "homeRank": 59, "awayRank": 148, "date": "", "time": "07:30:00 PM EDT", "venue": "Neutral"}, {"home": "Florida", "away": "Kentucky", "play": "", "threshPlay": "Take Florida at -11 or better", "emLine": -13.3, "vegasLine": -11.5, "homeRank": 4, "awayRank": 25, "date": "", "time": "01:00:00 PM EDT", "venue": "Neutral"}, {"home": "Florida A&M", "away": "Southern", "play": "", "threshPlay": "Take Southern at -1 or better", "emLine": 3.2, "vegasLine": 1.5, "homeRank": 309, "awayRank": 262, "date": "", "time": "08:30:00 PM EDT", "venue": "Neutral"}, {"home": "Wichita State", "away": "Tulsa", "play": "", "threshPlay": "Take Tulsa at -0 or better", "emLine": 2.4, "vegasLine": 0.5, "homeRank": 84, "awayRank": 57, "date": "", "time": "05:00:00 PM EDT", "venue": "Neutral"}];
+
+function loadBakedData() {
+  emGames = BAKED_EM_GAMES;
+  bestBetsMap = BAKED_BEST_BETS;
+  allEMPlays = BAKED_ALL_EM_PLAYS;
+
+  // Mark isBestBet on each game (already done in baked data, but ensure consistency)
+  emGames.forEach(g => {
+    const bbKey = (g.home || '').trim().toLowerCase() + '|||' + (g.away || '').trim().toLowerCase();
+    g.isBestBet = bestBetsMap.hasOwnProperty(bbKey);
+    g.bestBetPlay = bestBetsMap[bbKey] || null;
+  });
+
+  // Hide upload zone, show main content
+  document.getElementById('uploadZone').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+
+  // Build date dropdown and select today
+  buildDateDropdown();
+
+  // Update header subtitle
+  const dispDate = selectedDate
+    ? new Date(selectedDate.slice(0,4)+'-'+selectedDate.slice(4,6)+'-'+selectedDate.slice(6,8))
+        .toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})
+    : new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  document.getElementById('headerSub').textContent = `EvanMiya · ${dispDate}`;
+
+  // Build merged data and fetch ESPN
+  buildMerged();
+  setESPNStatus('loading');
+  fetchESPN();
+}
+
+document.addEventListener('DOMContentLoaded', loadBakedData);
+
+</script>
+</body>
+</html>
